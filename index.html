@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DFS Cruncher</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--ink:#17202a;--mute:#6b7280;--line:#e3e0d8;--acc:#1f5f8b;--ok:#1a7f4b;--warn:#b7791f;--bad:#b3261e;--lock:#e8f3ec;--ban:#fbeaea}
+@media (prefers-color-scheme:dark){:root{--bg:#121417;--card:#1b1f24;--ink:#e8e8e4;--mute:#9aa3ad;--line:#2b313a;--acc:#6fb1e0;--lock:#15301f;--ban:#3a1d1b}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+header{padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+h1{font-size:17px;margin:0}h2{font-size:15px;margin:0 0 8px}
+main{padding:12px 16px 40px;max-width:980px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+button{font:inherit;padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button.p{background:var(--acc);color:#fff;border-color:var(--acc)}button:disabled{opacity:.5}
+input[type=text],input[type=email],input[type=number],select{font:inherit;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);width:100%}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.grow{flex:1 1 180px}
+.mute{color:var(--mute);font-size:13px}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.slider{display:grid;grid-template-columns:38px 1fr 44px;gap:8px;align-items:center;margin:6px 0}
+input[type=range]{width:100%}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:5px 4px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}th{cursor:pointer;color:var(--mute);font-weight:600}
+tr.lock td{background:var(--lock)}tr.ban td{background:var(--ban);text-decoration:line-through}
+.pill{display:inline-block;padding:1px 7px;border-radius:999px;border:1px solid var(--line);font-size:12px;margin-right:4px}
+.lu{border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0;font-size:13px}.lu b{font-size:13px}
+.hide{display:none}.small{font-size:12px}
+label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .2s}
+</style>
+</head>
+<body>
+<header><h1>🏀 DFS Cruncher</h1><div class="row"><span id="who" class="mute"></span><button id="signout" class="hide">Sign out</button></div></header>
+<main>
+<section id="signin" class="card">
+  <h2>Sign in</h2>
+  <p class="mute">Only Dale's and Jack's addresses are allowed. You'll get an email with a link; tap it on this phone.</p>
+  <div class="row"><input id="email" type="email" placeholder="you@example.com" class="grow"><button id="send" class="p">Send link</button></div>
+  <p id="signmsg" class="mute"></p>
+</section>
+
+<section id="app" class="hide">
+  <div class="card">
+    <h2>Contest</h2>
+    <div class="row"><input id="contest" type="text" placeholder="DraftStars contest id or URL" class="grow"><button id="load" class="p">Load</button><button id="refresh" title="Re-read every source">Refresh</button></div>
+    <div id="slateinfo" class="mute" style="margin-top:8px"></div>
+    <div id="ages" class="small mute"></div>
+  </div>
+
+  <div id="controls" class="card hide">
+    <h2>Mix of projections</h2>
+    <div class="slider"><span>DC</span><input type="range" id="w_dc" min="0" max="10" value="10"><span id="v_dc">100%</span></div>
+    <div class="slider"><span>BM</span><input type="range" id="w_bm" min="0" max="10" value="0"><span id="v_bm">0%</span></div>
+    <div class="slider"><span>RW</span><input type="range" id="w_rw" min="0" max="10" value="0"><span id="v_rw">0%</span></div>
+    <p class="small mute">Shares are the slider values divided by their total. The tested default is 100% Drop Coverage; the Monday report (research/results/sources) says whether a mix has earned a change. A player a source doesn't project gets the others' share.</p>
+    <div class="row">
+      <label class="chk">Lineups <input id="nlu" type="number" min="1" max="50" value="15" style="width:70px"></label>
+      <label class="chk">Differ by <input id="mindiff" type="number" min="1" max="8" value="3" style="width:60px"></label>
+      <label class="chk">Max per team <input id="maxteam" type="number" min="1" max="9" value="5" style="width:60px"></label>
+      <label class="chk"><input id="usestacks" type="checkbox"> Game stacks</label>
+    </div>
+    <div id="stacks" class="hide small">
+      <p class="mute">Your call: each lineup takes k+ players from each ticked game. Tested 2024-26: stacking the highest totals lost in both seasons; stacking games missing key players lost 23 points on the blind season (FINDINGS F21). Off by default.</p>
+      <div id="stacklist"></div>
+    </div>
+    <div class="row" style="margin-top:8px"><button id="build" class="p">Build lineups</button><span id="buildmsg" class="mute"></span></div>
+  </div>
+
+  <div id="players" class="card hide">
+    <h2>Players <span class="small mute">tap a row: lock → exclude → clear</span></h2>
+    <div class="row small"><label class="chk"><input id="onlyproj" type="checkbox" checked> only players with a number</label><input id="find" type="text" placeholder="find a player" style="max-width:220px"></div>
+    <div style="overflow-x:auto"><table id="ptable"><thead><tr>
+      <th data-k="name">Player</th><th data-k="team">Team</th><th data-k="pos">Pos</th><th data-k="salary">$</th><th data-k="dc">DC</th><th data-k="bm">BM</th><th data-k="rw">RW</th><th data-k="mix">Mix</th><th data-k="value">Val</th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <div id="result" class="card hide">
+    <h2>Lineups</h2>
+    <div class="row"><button id="csv">Download DraftStars CSV</button><button id="save" class="p">Save build</button><span id="savemsg" class="mute"></span></div>
+    <div id="lineups"></div>
+    <div id="exposure" class="small mute"></div>
+  </div>
+
+  <div id="swaps" class="card hide">
+    <h2>Late swaps (bulk)</h2>
+    <p class="small mute">Once the contest is live DraftStars only swaps one player for another across every team. The tested rule (F21-F22): swap only when it gains 5+ points per team, or the player is out. Checks the latest saved build against the numbers now.</p>
+    <div class="row"><select id="buildpick" class="grow"></select><button id="swapcheck" class="p">Check swaps</button></div>
+    <div id="swaplist"></div>
+  </div>
+</section>
+</main>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highs@1.15.3/build/highs.js"></script>
+<script src="https://gpupsgkyyldqyfemtjml.supabase.co/functions/v1/dfs/lineup.js"></script>
+<script>
+const SUPA_URL = "https://gpupsgkyyldqyfemtjml.supabase.co", ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwdXBzZ2t5eWxkcXlmZW10am1sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NDQ5NjQsImV4cCI6MjA5NzMyMDk2NH0.QKumwzupWA_61YodHozZmHE32HTIlHnoquXxaNzlvBA";
+const API = SUPA_URL + "/functions/v1/dfs";
+const supa = window.supabase.createClient(SUPA_URL, ANON);
+const $ = (id) => document.getElementById(id);
+const toast = (m) => { const t = $("toast"); t.textContent = m; t.style.opacity = 1; setTimeout(() => (t.style.opacity = 0), 2600); };
+let S = { slate: null, pool: [], marks: {}, lineups: [], highs: null, session: null, sort: { k: "mix", d: -1 } };
+
+// ── sign-in ─────────────────────────────────────────────────────────────
+async function refreshSession() {
+  const { data } = await supa.auth.getSession();
+  S.session = data.session;
+  const inApp = !!S.session;
+  $("signin").classList.toggle("hide", inApp); $("app").classList.toggle("hide", !inApp);
+  $("signout").classList.toggle("hide", !inApp);
+  $("who").textContent = inApp ? S.session.user.email : "";
+  if (inApp) loadBuildsToday();
+}
+$("send").onclick = async () => {
+  const email = $("email").value.trim();
+  if (!email) return;
+  $("send").disabled = true;
+  const { error } = await supa.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname.replace(/index\.html$/, "") } });
+  $("signmsg").textContent = error ? "Couldn't send: " + error.message : "Sent. Open the email on this phone and tap the link.";
+  $("send").disabled = false;
+};
+$("signout").onclick = async () => { await supa.auth.signOut(); location.reload(); };
+supa.auth.onAuthStateChange(() => refreshSession());
+refreshSession();
+
+async function api(path, opts = {}) {
+  const { data } = await supa.auth.getSession();
+  const r = await fetch(API + "/api" + path, { ...opts, headers: { ...(opts.headers || {}), authorization: "Bearer " + (data.session?.access_token || ""), "content-type": "application/json" } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+
+// ── slate ───────────────────────────────────────────────────────────────
+const fmtT = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const fmtAge = (iso) => { if (!iso) return "none"; const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + " min ago" : (m / 60).toFixed(1) + " h ago"; };
+function contestIdFrom(s) { s = String(s).trim(); if (!s.includes("/")) return s; const parts = s.split(/[/?#]/).filter((x) => /^[A-Za-z0-9]{6,12}$/.test(x)); return parts.pop() || ""; }
+$("load").onclick = () => loadSlate();
+$("refresh").onclick = () => loadSlate(true);
+async function loadSlate(quiet) {
+  const id = contestIdFrom($("contest").value);
+  if (!id) return;
+  $("load").disabled = true; $("slateinfo").textContent = "Loading…";
+  try {
+    const s = await api("/slate?contest=" + encodeURIComponent(id));
+    S.slate = s;
+    S.pool = s.pool.map((p, i) => ({ ...p, i, posList: p.pos }));
+    const c = s.contest, n = S.pool.filter((p) => p.dc != null).length;
+    $("slateinfo").innerHTML = `<b>${c.name || id}</b> · ${c.is_captain ? "single game (captain)" : c.n_games + " games"} · US date ${c.slate_date} · $${c.entry_fee ?? "?"} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} per person<br>`
+      + `Tips: ${s.games.map((g) => `${g.away}@${g.home} ${g.tip ? fmtT(g.tip) : "?"}`).join(", ")}<br>`
+      + `${S.pool.length} players, ${n} with a Drop Coverage number, ${S.pool.filter((p) => p.player_id == null).length} unmatched names`;
+    $("ages").textContent = `Numbers as of — DC: ${fmtAge(s.ages.drop_coverage)} · BM: ${fmtAge(s.ages.basketball_monster)} · RW: ${fmtAge(s.ages.rotowire)}`;
+    $("nlu").value = c.is_captain ? 1 : Math.min(15, c.entries_per_person || 15);
+    $("maxteam").value = s.rules.maxPerTeam || 5;
+    $("mindiff").value = c.is_captain ? 1 : 3;
+    $("stacklist").innerHTML = s.games.map((g) => `<label class="chk"><input type="checkbox" class="stk" data-g="${g.id}"> ${g.away}@${g.home} <select class="stk-k" data-g="${g.id}"><option>2</option><option selected>3</option><option>4</option></select>+</label>`).join("");
+    for (const el of ["controls", "players", "swaps"]) $(el).classList.remove("hide");
+    $("result").classList.add("hide");
+    S.marks = {}; S.lineups = [];
+    renderPlayers(); fillBuildPick(s.builds);
+    if (!quiet) toast("Slate loaded");
+  } catch (e) { $("slateinfo").innerHTML = `<span class="bad">${e.message}</span>`; }
+  $("load").disabled = false;
+}
+
+// ── mix ─────────────────────────────────────────────────────────────────
+function weights() {
+  const w = { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value };
+  const t = w.dc + w.bm + w.rw || 1;
+  for (const k of ["dc", "bm", "rw"]) $("v_" + k).textContent = Math.round(100 * w[k] / t) + "%";
+  return { dc: w.dc / t, bm: w.bm / t, rw: w.rw / t };
+}
+function mixOf(p, w) {
+  let num = 0, den = 0;
+  for (const k of ["dc", "bm", "rw"]) if (p[k] != null && w[k] > 0) { num += w[k] * p[k]; den += w[k]; }
+  return den > 0 ? num / den : null;
+}
+function isOut(p) { return p.status && /out|inj|susp|ir\b/i.test(String(p.status)); }
+for (const k of ["dc", "bm", "rw"]) $("w_" + k).oninput = () => renderPlayers();
+$("usestacks").onchange = () => $("stacks").classList.toggle("hide", !$("usestacks").checked);
+
+// ── players table ───────────────────────────────────────────────────────
+document.querySelectorAll("#ptable th").forEach((th) => th.onclick = () => { const k = th.dataset.k; S.sort = { k, d: S.sort.k === k ? -S.sort.d : -1 }; renderPlayers(); });
+$("onlyproj").onchange = renderPlayers; $("find").oninput = renderPlayers;
+function renderPlayers() {
+  if (!S.slate) return;
+  const w = weights();
+  for (const p of S.pool) { p.mix = mixOf(p, w); p.value = p.mix != null && p.salary ? p.mix / (p.salary / 1000) : null; }
+  const q = $("find").value.trim().toLowerCase();
+  let rows = S.pool.filter((p) => (!$("onlyproj").checked || p.mix != null || S.marks[p.i]) && (!q || p.name.toLowerCase().includes(q)));
+  const { k, d } = S.sort;
+  rows.sort((a, b) => { const x = a[k], y = b[k]; if (x == null) return 1; if (y == null) return -1; return (typeof x === "string" ? x.localeCompare(y) : x - y) * d; });
+  const f = (v, dp = 1) => (v == null ? "" : (+v).toFixed(dp));
+  $("ptable").querySelector("tbody").innerHTML = rows.map((p) => `<tr data-i="${p.i}" class="${S.marks[p.i] || ""}">
+    <td>${p.name}${isOut(p) ? ' <span class="bad small">OUT</span>' : ""}${p.player_id == null ? ' <span class="warn small">?</span>' : ""}</td><td>${p.team || ""}</td><td>${(p.posList || []).join("/")}</td>
+    <td>${p.salary ? (p.salary / 1000).toFixed(1) + "k" : ""}</td><td>${f(p.dc)}</td><td>${f(p.bm)}</td><td>${f(p.rw)}</td><td><b>${f(p.mix)}</b></td><td>${f(p.value, 2)}</td></tr>`).join("");
+  $("ptable").querySelectorAll("tbody tr").forEach((tr) => tr.onclick = () => {
+    const i = +tr.dataset.i, m = S.marks[i];
+    S.marks[i] = m === "lock" ? "ban" : m === "ban" ? undefined : "lock";
+    if (!S.marks[i]) delete S.marks[i];
+    renderPlayers();
+  });
+}
+
+// ── build ───────────────────────────────────────────────────────────────
+async function highs() { if (!S.highs) S.highs = await window.highs({ locateFile: (f) => "https://cdn.jsdelivr.net/npm/highs@1.15.3/build/" + f }); return S.highs; }
+function solverPool() {
+  const w = weights();
+  return S.pool.filter((p) => p.salary && p.posList && (S.slate.rules.captain || p.posList.length)).map((p) => ({
+    i: p.i, name: p.name, team: p.team, game: p.game, pos: p.posList, salary: p.salary,
+    mean: S.marks[p.i] === "ban" || (isOut(p) && S.marks[p.i] !== "lock") ? 0 : (mixOf(p, w) || 0) }));
+}
+$("build").onclick = async () => {
+  $("build").disabled = true; $("buildmsg").textContent = "Building…";
+  try {
+    const h = await highs();
+    const rules = { ...S.slate.rules, maxPerTeam: Math.min(S.slate.rules.maxPerTeam || 5, +$("maxteam").value || 5) };
+    const locked = Object.entries(S.marks).filter(([, m]) => m === "lock").map(([i]) => [+i, rules.captain ? "ANY" : S.pool[+i].posList[0]]);
+    const banned = new Set(Object.entries(S.marks).filter(([, m]) => m === "ban").map(([i]) => +i));
+    let stacks = null;
+    if ($("usestacks").checked) {
+      stacks = [...document.querySelectorAll(".stk:checked")].map((el) => ({ game: el.dataset.g, k: +document.querySelector(`.stk-k[data-g="${el.dataset.g}"]`).value }));
+      if (!stacks.length) stacks = null;
+    }
+    const pool = solverPool();
+    const t0 = Date.now();
+    const lus = window.Lineup.build(h, pool, rules, +$("nlu").value || 1, { minDiff: +$("mindiff").value || 1, locked: locked.map(([i, s]) => [i, s === "ANY" ? "ANY" : (pool.find((p) => p.i === i)?.pos[0] || s)]), banned, stacks });
+    if (!lus.length) throw new Error("no legal lineup: loosen the locks or the stacks");
+    S.lineups = lus; S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), stacks };
+    renderLineups(pool);
+    $("buildmsg").textContent = `${lus.length} lineup(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s`;
+    $("result").classList.remove("hide"); $("result").scrollIntoView({ behavior: "smooth" });
+  } catch (e) { $("buildmsg").innerHTML = `<span class="bad">${e.message}</span>`; }
+  $("build").disabled = false;
+};
+function lineupProj(lu, pool) { const by = new Map(pool.map((p) => [p.i, p])); return lu.reduce((a, z) => a + (z.slot === "CAP" ? 1.5 : 1) * (by.get(z.i)?.mean || 0), 0); }
+function renderLineups(pool) {
+  const by = new Map(S.pool.map((p) => [p.i, p]));
+  const counts = {};
+  $("lineups").innerHTML = S.lineups.map((lu, k) => {
+    const sal = lu.reduce((a, z) => a + (z.slot === "CAP" ? 1.5 : 1) * by.get(z.i).salary, 0);
+    for (const z of lu) counts[z.i] = (counts[z.i] || 0) + 1;
+    return `<div class="lu"><b>#${k + 1}</b> · ${lineupProj(lu, pool).toFixed(1)} pts · $${(sal / 1000).toFixed(1)}k<br>${lu.map((z) => `<span class="pill">${z.slot} ${by.get(z.i).name}</span>`).join("")}</div>`;
+  }).join("");
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([i, n]) => `${by.get(+i).name} ${n}`);
+  $("exposure").textContent = "In most lineups: " + top.join(" · ");
+}
+$("csv").onclick = () => {
+  const by = new Map(S.pool.map((p) => [p.i, p]));
+  const labels = S.slate.rules.captain ? ["CAP", "FLEX", "FLEX", "FLEX", "FLEX", "FLEX"] : Object.entries(S.slate.rules.slots).flatMap(([s, n]) => Array(n).fill(s));
+  const lines = [labels.join(",")].concat(S.lineups.map((lu) => lu.map((z) => by.get(z.i).ds_id).join(",")));
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+  a.download = `${S.slate.contest.contest_id}-${new Date().toISOString().slice(11, 16).replace(":", "")}-upload.csv`; a.click();
+};
+$("save").onclick = async () => {
+  try {
+    const by = new Map(S.pool.map((p) => [p.i, p]));
+    const pool = solverPool();
+    const r = await api("/build", { method: "POST", body: JSON.stringify({
+      contest_id: S.slate.contest.contest_id, contest_name: S.slate.contest.name, slate_date: S.slate.contest.slate_date, is_captain: S.slate.rules.captain,
+      settings: S.settings, lineups: S.lineups.map((lu) => lu.map((z) => ({ ds_id: by.get(z.i).ds_id, slot: z.slot, player_id: by.get(z.i).player_id, name: by.get(z.i).name }))),
+      projected: S.lineups.map((lu) => +lineupProj(lu, pool).toFixed(2)) }) });
+    $("savemsg").textContent = `Saved as build ${r.build_id}`;
+    S.slate.builds.unshift({ build_id: r.build_id, built_at: r.built_at, lineups: S.lineups.map((lu) => lu.map((z) => ({ ds_id: by.get(z.i).ds_id, slot: z.slot }))), settings: S.settings });
+    fillBuildPick(S.slate.builds);
+  } catch (e) { $("savemsg").innerHTML = `<span class="bad">${e.message}</span>`; }
+};
+
+// ── swaps ───────────────────────────────────────────────────────────────
+function fillBuildPick(builds) {
+  $("buildpick").innerHTML = (builds || []).map((b) => `<option value="${b.build_id}">Build ${b.build_id} · ${new Date(b.built_at).toLocaleString([], { hour: "numeric", minute: "2-digit", day: "numeric", month: "short" })} · ${b.lineups.length} lineups${b.entered ? " · entered" : ""}</option>`).join("") || "<option value=''>no saved build for this contest</option>";
+}
+$("swapcheck").onclick = () => {
+  const b = (S.slate.builds || []).find((x) => String(x.build_id) === $("buildpick").value);
+  if (!b) return;
+  const byDs = new Map(S.pool.map((p) => [p.ds_id, p]));
+  const w = b.settings?.weights || weights();
+  const pool = S.pool.filter((p) => p.salary).map((p) => ({ i: p.i, name: p.name, team: p.team, game: p.game, pos: p.posList, salary: p.salary, mean: mixOf(p, w) || 0 }));
+  const now = Date.now();
+  const started = new Set(S.pool.filter((p) => p.tip && new Date(p.tip).getTime() <= now).map((p) => p.i));
+  const outNow = new Set(S.pool.filter((p) => isOut(p) || (p.player_id != null && p.dc == null && !started.has(p.i))).map((p) => p.i));
+  const lineups = b.lineups.map((lu) => lu.map((z) => ({ i: byDs.get(z.ds_id)?.i, slot: z.slot })).filter((z) => z.i != null));
+  const r = window.Lineup.bulkSwaps(pool, S.slate.rules, lineups, started, outNow, 5);
+  const by = new Map(S.pool.map((p) => [p.i, p]));
+  $("swaplist").innerHTML = r.swaps.length
+    ? r.swaps.map((s) => `<div class="lu"><b>SWAP ${by.get(s.x).name} → ${by.get(s.y).name}</b> · ${outNow.has(s.x) ? "out tonight" : "+" + s.step.toFixed(1) + " pts each"} · ${s.touched.length} team(s)</div>`).join("")
+    : `<p class="ok">No swap worth 5+ points per team. Leave the teams as they are.</p>`;
+  const stuck = [...new Set(r.lineups.flatMap((lu) => lu.map((z) => z.i)))].filter((i) => outNow.has(i));
+  if (stuck.length) $("swaplist").innerHTML += `<p class="warn">Still in and out tonight (no legal bulk swap covers every team): ${stuck.map((i) => by.get(i).name).join(", ")}</p>`;
+};
+async function loadBuildsToday() { try { const b = await api("/builds"); if (b.length && !$("contest").value) { $("contest").value = b[0].contest_id; } } catch {} }
+</script>
+</body>
+</html>
