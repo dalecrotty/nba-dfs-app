@@ -125,10 +125,23 @@ $("signout").onclick = async () => { await supa.auth.signOut(); location.reload(
 supa.auth.onAuthStateChange(() => refreshSession());
 refreshSession();
 
+// the signed-in token for an API call: the client's session, else the one
+// we saw last (Chrome on iOS has answered no session seconds after showing
+// one), else one refresh; with none, back to the sign-in panel
+async function token() {
+  let { data } = await supa.auth.getSession();
+  let sess = data.session;
+  if (!sess && S.session && S.session.expires_at * 1000 > Date.now() + 30000) sess = S.session;
+  if (!sess) { try { ({ data } = await supa.auth.refreshSession()); sess = data.session; } catch (e) {} }
+  if (sess) S.session = sess;
+  return sess?.access_token || "";
+}
 async function api(path, opts = {}) {
-  const { data } = await supa.auth.getSession();
-  const r = await fetch(API + "/api" + path, { ...opts, headers: { ...(opts.headers || {}), authorization: "Bearer " + (data.session?.access_token || ""), "content-type": "application/json" } });
+  const tok = await token();
+  if (!tok) { await refreshSession(); throw new Error("Your sign-in has lapsed. Enter your email again and tap the new link."); }
+  const r = await fetch(API + "/api" + path, { ...opts, headers: { ...(opts.headers || {}), authorization: "Bearer " + tok, "content-type": "application/json" } });
   const j = await r.json().catch(() => ({}));
+  if (r.status === 401 && j.reason !== "not_allowed") { await supa.auth.signOut().catch(() => {}); await refreshSession(); }
   if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
   return j;
 }
