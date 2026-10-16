@@ -166,6 +166,13 @@ async function loadSlate(quiet) {
       + `Tips: ${s.games.map((g) => `${g.away}@${g.home} ${g.tip ? fmtT(g.tip) : "?"}`).join(", ")}<br>`
       + `${S.pool.length} players, ${n} with a Drop Coverage number, ${S.pool.filter((p) => p.player_id == null).length} unmatched names`;
     $("ages").textContent = `Numbers as of — DC: ${fmtAge(s.ages.drop_coverage)} · BM: ${fmtAge(s.ages.basketball_monster)} · RW: ${fmtAge(s.ages.rotowire)}`;
+    // Drop Coverage runs once a day for the day's games; before that run the
+    // other sources are all there is, so point the sliders at them
+    const have = { bm: S.pool.some((p) => p.bm != null), rw: S.pool.some((p) => p.rw != null) };
+    if (!n && (have.bm || have.rw) && +$("w_bm").value === 0 && +$("w_rw").value === 0) {
+      $("w_dc").value = 0; $("w_bm").value = have.bm ? 5 : 0; $("w_rw").value = have.rw ? 5 : 0;
+      $("ages").innerHTML += ` <span class="warn">Drop Coverage has no numbers for this slate yet (its run for the day hasn't happened), so the sliders are on ${have.bm && have.rw ? "BM and RW" : have.bm ? "BM" : "RW"} for now. Tap Refresh later and move DC back up when it shows a time.</span>`;
+    }
     $("nlu").value = c.is_captain ? 1 : Math.min(15, c.entries_per_person || 15);
     $("maxteam").value = s.rules.maxPerTeam || 5;
     $("mindiff").value = c.is_captain ? 1 : 3;
@@ -239,6 +246,7 @@ $("build").onclick = async () => {
       if (!stacks.length) stacks = null;
     }
     const pool = solverPool();
+    if (!pool.some((p) => p.mean > 0)) throw new Error("no player has a projection in this mix: move up the slider of a source that shows a time under 'Numbers as of'");
     const t0 = Date.now();
     const lus = window.Lineup.build(h, pool, rules, +$("nlu").value || 1, { minDiff: +$("mindiff").value || 1, locked: locked.map(([i, s]) => [i, s === "ANY" ? "ANY" : (pool.find((p) => p.i === i)?.pos[0] || s)]), banned, stacks });
     if (!lus.length) throw new Error("no legal lineup: loosen the locks or the stacks");
@@ -294,7 +302,7 @@ $("swapcheck").onclick = () => {
   const pool = S.pool.filter((p) => p.salary).map((p) => ({ i: p.i, name: p.name, team: p.team, game: p.game, pos: p.posList, salary: p.salary, mean: mixOf(p, w) || 0 }));
   const now = Date.now();
   const started = new Set(S.pool.filter((p) => p.tip && new Date(p.tip).getTime() <= now).map((p) => p.i));
-  const outNow = new Set(S.pool.filter((p) => isOut(p) || (p.player_id != null && p.dc == null && !started.has(p.i))).map((p) => p.i));
+  const outNow = new Set(S.pool.filter((p) => isOut(p) || (p.player_id != null && mixOf(p, w) == null && !started.has(p.i))).map((p) => p.i));   // dropped by every source in the mix = out
   const lineups = b.lineups.map((lu) => lu.map((z) => ({ i: byDs.get(z.ds_id)?.i, slot: z.slot })).filter((z) => z.i != null));
   const r = window.Lineup.bulkSwaps(pool, S.slate.rules, lineups, started, outNow, 5);
   const by = new Map(S.pool.map((p) => [p.i, p]));
