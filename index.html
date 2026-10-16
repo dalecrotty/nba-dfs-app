@@ -99,6 +99,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
 const SUPA_URL = "https://gpupsgkyyldqyfemtjml.supabase.co", ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwdXBzZ2t5eWxkcXlmZW10am1sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NDQ5NjQsImV4cCI6MjA5NzMyMDk2NH0.QKumwzupWA_61YodHozZmHE32HTIlHnoquXxaNzlvBA";
 const API = SUPA_URL + "/functions/v1/dfs";
 const supa = window.supabase.createClient(SUPA_URL, ANON);
+const HIGHS_FACTORY = window.Module;     // highs.js (emscripten) exposes its loader as the global Module in a browser
 const $ = (id) => document.getElementById(id);
 const toast = (m) => { const t = $("toast"); t.textContent = m; t.style.opacity = 1; setTimeout(() => (t.style.opacity = 0), 2600); };
 let S = { slate: null, pool: [], marks: {}, lineups: [], highs: null, session: null, sort: { k: "mix", d: -1 } };
@@ -218,7 +219,7 @@ function renderPlayers() {
 }
 
 // ── build ───────────────────────────────────────────────────────────────
-async function highs() { if (!S.highs) S.highs = await window.highs({ locateFile: (f) => "https://cdn.jsdelivr.net/npm/highs@1.15.3/build/" + f }); return S.highs; }
+async function getHighs() { if (!S.highs) S.highs = await HIGHS_FACTORY({ locateFile: (f) => "https://cdn.jsdelivr.net/npm/highs@1.15.3/build/" + f }); return S.highs; }
 function solverPool() {
   const w = weights();
   return S.pool.filter((p) => p.salary && p.posList && (S.slate.rules.captain || p.posList.length)).map((p) => ({
@@ -228,7 +229,7 @@ function solverPool() {
 $("build").onclick = async () => {
   $("build").disabled = true; $("buildmsg").textContent = "Building…";
   try {
-    const h = await highs();
+    const h = await getHighs();
     const rules = { ...S.slate.rules, maxPerTeam: Math.min(S.slate.rules.maxPerTeam || 5, +$("maxteam").value || 5) };
     const locked = Object.entries(S.marks).filter(([, m]) => m === "lock").map(([i]) => [+i, rules.captain ? "ANY" : S.pool[+i].posList[0]]);
     const banned = new Set(Object.entries(S.marks).filter(([, m]) => m === "ban").map(([i]) => +i));
