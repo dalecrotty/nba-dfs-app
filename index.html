@@ -42,8 +42,13 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
 
 <section id="app" class="hide">
   <div class="card">
+    <h2>NBA contests in the lobby</h2>
+    <div class="row"><label class="chk"><input id="allfees" type="checkbox"> every entry fee (not just $2 and $15)</label><button id="lobbyload">Refresh list</button></div>
+    <div id="lobby" class="small mute">Loading…</div>
+  </div>
+  <div class="card">
     <h2>Contest</h2>
-    <div class="row"><input id="contest" type="text" placeholder="DraftStars contest id or URL" class="grow"><button id="load" class="p">Load</button><button id="refresh" title="Re-read every source">Refresh</button></div>
+    <div class="row"><input id="contest" type="text" placeholder="tap a contest above, or paste its id / URL" class="grow"><button id="load" class="p">Load</button><button id="refresh" title="Re-read every source">Refresh</button></div>
     <div id="slateinfo" class="mute" style="margin-top:8px"></div>
     <div id="ages" class="small mute"></div>
   </div>
@@ -112,7 +117,7 @@ async function refreshSession() {
   $("signin").classList.toggle("hide", inApp); $("app").classList.toggle("hide", !inApp);
   $("signout").classList.toggle("hide", !inApp);
   $("who").textContent = inApp ? S.session.user.email : "";
-  if (inApp) loadBuildsToday();
+  if (inApp) { loadBuildsToday(); if (!S.lobby) loadLobby(); }
 }
 $("send").onclick = async () => {
   const email = $("email").value.trim();
@@ -146,6 +151,23 @@ async function api(path, opts = {}) {
   if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
   return j;
 }
+
+// ── lobby ───────────────────────────────────────────────────────────────
+const money = (v) => (v == null ? "?" : "$" + (+v).toLocaleString(undefined, { maximumFractionDigits: 0 }));
+async function loadLobby() {
+  $("lobby").textContent = "Loading…";
+  try {
+    const rows = await api("/lobby");
+    S.lobby = rows;
+    const all = $("allfees").checked;
+    const show = rows.filter((c) => all || c.entry_fee === 2 || c.entry_fee === 15);
+    if (!show.length) { $("lobby").textContent = rows.length ? "No $2 or $15 NBA contest in the lobby right now (tick 'every entry fee' to see the rest)." : "No NBA contests in the lobby right now."; return; }
+    $("lobby").innerHTML = show.map((c) => `<div class="lu lobbyrow" data-id="${c.contest_id}" style="cursor:pointer"><b>${c.name || c.contest_id}</b> · ${c.is_captain ? "single game" : (c.n_games ?? "?") + " games"} · $${c.entry_fee ?? "?"} · prize pool ${money(c.prize_pool)} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} each · tips ${c.starts_at ? fmtT(c.starts_at) : "?"}</div>`).join("");
+    document.querySelectorAll(".lobbyrow").forEach((el) => el.onclick = () => { $("contest").value = el.dataset.id; loadSlate(); window.scrollTo({ top: $("slateinfo").offsetTop - 80, behavior: "smooth" }); });
+  } catch (e) { $("lobby").innerHTML = `<span class="bad">${e.message}</span>`; }
+}
+$("lobbyload").onclick = loadLobby;
+$("allfees").onchange = loadLobby;
 
 // ── slate ───────────────────────────────────────────────────────────────
 const fmtT = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
