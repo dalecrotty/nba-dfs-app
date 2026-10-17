@@ -6,25 +6,38 @@
 <title>DFS Cruncher</title>
 <meta name="robots" content="noindex">
 <style>
-:root{--bg:#f6f4ef;--card:#fff;--ink:#17202a;--mute:#6b7280;--line:#e3e0d8;--acc:#1f5f8b;--ok:#1a7f4b;--warn:#b7791f;--bad:#b3261e;--lock:#e8f3ec;--ban:#fbeaea}
-@media (prefers-color-scheme:dark){:root{--bg:#121417;--card:#1b1f24;--ink:#e8e8e4;--mute:#9aa3ad;--line:#2b313a;--acc:#6fb1e0;--lock:#15301f;--ban:#3a1d1b}}
+:root{--bg:#f3f4f7;--card:#fff;--ink:#17202a;--mute:#6b7280;--line:#e2e5ea;--acc:#3d6fcf;--acc2:#2f5bb0;--ok:#1a7f4b;--warn:#b7791f;--bad:#b3261e;--lock:#e6f4ea;--ban:#fbeaea;--head:#3d6fcf;--zebra:#f7f8fb;--v1:#eef7f0;--v2:#d5eedb;--v3:#b7e2c2}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a20;--ink:#e8e8e4;--mute:#9aa3ad;--line:#2a2f38;--acc:#5b8def;--acc2:#4a7be0;--lock:#15301f;--ban:#3a1d1b;--head:#2f4f8f;--zebra:#1b1f26;--v1:#172a1e;--v2:#1b3a26;--v3:#1f4f30}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-header{padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+header{padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);background:var(--card)}
 h1{font-size:17px;margin:0}h2{font-size:15px;margin:0 0 8px}
-main{padding:12px 16px 40px;max-width:980px;margin:0 auto}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
-button{font:inherit;padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
-button.p{background:var(--acc);color:#fff;border-color:var(--acc)}button:disabled{opacity:.5}
-input[type=text],input[type=email],input[type=number],select{font:inherit;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);width:100%}
+main{padding:12px 16px 40px;max-width:1100px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+button{font:inherit;padding:9px 14px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button.p{background:var(--acc);color:#fff;border-color:var(--acc)}button.p:active{background:var(--acc2)}button:disabled{opacity:.45;cursor:default}
+input[type=text],input[type=email],input[type=number],select{font:inherit;padding:9px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink);width:100%}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.grow{flex:1 1 180px}
 .mute{color:var(--mute);font-size:13px}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.tabs{display:flex;gap:6px;margin:0 0 12px;position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0}
+.tab{flex:1 1 0;padding:10px 6px;border-radius:999px;font-weight:600;font-size:14px}
+.tab.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .slider{display:grid;grid-template-columns:38px 1fr 44px;gap:8px;align-items:center;margin:6px 0}
-input[type=range]{width:100%}
-table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:5px 4px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
-th:first-child,td:first-child{text-align:left}th{cursor:pointer;color:var(--mute);font-weight:600}
-tr.lock td{background:var(--lock)}tr.ban td{background:var(--ban);text-decoration:line-through}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.tablewrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:10px}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{position:sticky;top:0;background:var(--head);color:#fff;font-weight:600;cursor:pointer;user-select:none;z-index:1}
+th.on::after{content:" ▾"}th.on.up::after{content:" ▴"}
+th.l,td.l{text-align:left}th.c,td.c{text-align:center}
+td.grp,th.grp{border-left:1px solid var(--line)}
+tbody tr:nth-child(even) td{background:var(--zebra)}tbody tr{cursor:pointer}
+td.v1{background:var(--v1)!important}td.v2{background:var(--v2)!important}td.v3{background:var(--v3)!important;font-weight:600}
+td.mixv{font-weight:700}
+tr.lock td{background:var(--lock)!important}tr.ban td{background:var(--ban)!important;text-decoration:line-through;color:var(--mute)}
+.mark{display:inline-block;width:22px;text-align:center;color:var(--mute)}
 .pill{display:inline-block;padding:1px 7px;border-radius:999px;border:1px solid var(--line);font-size:12px;margin-right:4px}
-.lu{border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0;font-size:13px}.lu b{font-size:13px}
+.lu{border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0;font-size:13px}.lu b{font-size:13px}
+.lobbyrow:active{background:var(--zebra)}
 .hide{display:none}.small{font-size:12px}
 label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
 #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .2s}
@@ -41,57 +54,82 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
 </section>
 
 <section id="app" class="hide">
-  <div class="card">
-    <h2>NBA contests in the lobby</h2>
-    <div class="row"><label class="chk"><input id="allfees" type="checkbox"> every entry fee (not just $2 and $15)</label><button id="lobbyload">Refresh list</button></div>
-    <div id="lobby" class="small mute">Loading…</div>
-  </div>
-  <div class="card">
-    <h2>Contest</h2>
-    <div class="row"><input id="contest" type="text" placeholder="tap a contest above, or paste its id / URL" class="grow"><button id="load" class="p">Load</button><button id="refresh" title="Re-read every source">Refresh</button></div>
-    <div id="slateinfo" class="mute" style="margin-top:8px"></div>
-    <div id="ages" class="small mute"></div>
+  <nav class="tabs">
+    <button class="tab on" data-t="contests">Contests</button>
+    <button class="tab" data-t="value" disabled>Value</button>
+    <button class="tab" data-t="build" disabled>Build</button>
+    <button class="tab" data-t="swaps" disabled>Swaps</button>
+  </nav>
+
+  <div class="pane" data-t="contests">
+    <div class="card">
+      <h2>NBA contests in the lobby</h2>
+      <div class="row"><label class="chk"><input id="allfees" type="checkbox"> every entry fee (not just $2 and $15)</label><button id="lobbyload">Refresh list</button></div>
+      <div id="lobby" class="small mute">Loading…</div>
+    </div>
+    <div class="card">
+      <h2>Contest</h2>
+      <div class="row"><input id="contest" type="text" placeholder="tap a contest above, or paste its id / URL" class="grow"><button id="load" class="p">Load</button><button id="refresh" title="Re-read every source">Refresh</button></div>
+      <div id="slateinfo" class="mute" style="margin-top:8px"></div>
+      <div id="ages" class="small mute"></div>
+    </div>
   </div>
 
-  <div id="controls" class="card hide">
+  <div id="mixcard" class="card hide">
     <h2>Mix of projections</h2>
     <div class="slider"><span>DC</span><input type="range" id="w_dc" min="0" max="10" value="10"><span id="v_dc">100%</span></div>
     <div class="slider"><span>BM</span><input type="range" id="w_bm" min="0" max="10" value="0"><span id="v_bm">0%</span></div>
     <div class="slider"><span>RW</span><input type="range" id="w_rw" min="0" max="10" value="0"><span id="v_rw">0%</span></div>
     <p class="small mute">Shares are the slider values divided by their total. The tested default is 100% Drop Coverage; the Monday report (research/results/sources) says whether a mix has earned a change. A player a source doesn't project gets the others' share.</p>
-    <div class="row">
-      <label class="chk">Lineups <input id="nlu" type="number" min="1" max="50" value="15" style="width:70px"></label>
-      <label class="chk">Differ by <input id="mindiff" type="number" min="1" max="8" value="3" style="width:60px"></label>
-      <label class="chk">Max per team <input id="maxteam" type="number" min="1" max="9" value="5" style="width:60px"></label>
-      <label class="chk"><input id="usestacks" type="checkbox"> Game stacks</label>
+  </div>
+
+  <div class="pane hide" data-t="value">
+    <div id="players" class="card hide">
+      <h2>Value <span class="small mute">tap a header to sort · tap a row: lock → exclude → clear</span></h2>
+      <div class="row small">
+        <label class="chk"><input id="onlyproj" type="checkbox" checked> only players with a number</label>
+        <label class="chk">100% value = <input id="par" type="number" min="1" max="6" step="0.1" value="3" style="width:64px"> pts per $1k</label>
+        <input id="find" type="text" placeholder="find a player" style="max-width:220px">
+      </div>
+      <div class="tablewrap"><table id="ptable"><thead><tr>
+        <th class="c" data-k="mark"></th><th class="c" data-k="rank">#</th><th class="l" data-k="name">Player</th><th class="l" data-k="team">Team</th><th class="l" data-k="pos">Pos</th><th data-k="salary">Price</th>
+        <th class="grp" data-k="dc">DC</th><th data-k="dcv">Val</th><th class="grp" data-k="bm">BM</th><th data-k="bmv">Val</th><th class="grp" data-k="rw">RW</th><th data-k="rwv">Val</th>
+        <th class="grp" data-k="mix">Mix</th><th data-k="mixv">Val</th>
+      </tr></thead><tbody></tbody></table></div>
+      <p class="small mute" style="margin:8px 0 0">Value = projection ÷ (price ÷ $1,000) ÷ the par above, so 100% is a 300-point team at the $100k cap when par is 3. Green: 90%+, 100%+, 110%+.</p>
     </div>
-    <div id="stacks" class="hide small">
-      <p class="mute">Your call: each lineup takes k+ players from each ticked game. Tested 2024-26: stacking the highest totals lost in both seasons; stacking games missing key players lost 23 points on the blind season (FINDINGS F21). Off by default.</p>
-      <div id="stacklist"></div>
+  </div>
+
+  <div class="pane hide" data-t="build">
+    <div id="controls" class="card hide">
+      <h2>Build</h2>
+      <div class="row">
+        <label class="chk">Lineups <input id="nlu" type="number" min="1" max="50" value="15" style="width:70px"></label>
+        <label class="chk">Differ by <input id="mindiff" type="number" min="1" max="8" value="3" style="width:60px"></label>
+        <label class="chk">Max per team <input id="maxteam" type="number" min="1" max="9" value="5" style="width:60px"></label>
+        <label class="chk"><input id="usestacks" type="checkbox"> Game stacks</label>
+      </div>
+      <div id="stacks" class="hide small">
+        <p class="mute">Your call: each lineup takes k+ players from each ticked game. Tested 2024-26: stacking the highest totals lost in both seasons; stacking games missing key players lost 23 points on the blind season (FINDINGS F21). Off by default.</p>
+        <div id="stacklist"></div>
+      </div>
+      <div class="row" style="margin-top:8px"><button id="build" class="p">Build lineups</button><span id="buildmsg" class="mute"></span></div>
     </div>
-    <div class="row" style="margin-top:8px"><button id="build" class="p">Build lineups</button><span id="buildmsg" class="mute"></span></div>
+    <div id="result" class="card hide">
+      <h2>Lineups</h2>
+      <div class="row"><button id="csv">Download DraftStars CSV</button><button id="save" class="p">Save build</button><span id="savemsg" class="mute"></span></div>
+      <div id="lineups"></div>
+      <div id="exposure" class="small mute"></div>
+    </div>
   </div>
 
-  <div id="players" class="card hide">
-    <h2>Players <span class="small mute">tap a row: lock → exclude → clear</span></h2>
-    <div class="row small"><label class="chk"><input id="onlyproj" type="checkbox" checked> only players with a number</label><input id="find" type="text" placeholder="find a player" style="max-width:220px"></div>
-    <div style="overflow-x:auto"><table id="ptable"><thead><tr>
-      <th data-k="name">Player</th><th data-k="team">Team</th><th data-k="pos">Pos</th><th data-k="salary">$</th><th data-k="dc">DC</th><th data-k="bm">BM</th><th data-k="rw">RW</th><th data-k="mix">Mix</th><th data-k="value">Val</th>
-    </tr></thead><tbody></tbody></table></div>
-  </div>
-
-  <div id="result" class="card hide">
-    <h2>Lineups</h2>
-    <div class="row"><button id="csv">Download DraftStars CSV</button><button id="save" class="p">Save build</button><span id="savemsg" class="mute"></span></div>
-    <div id="lineups"></div>
-    <div id="exposure" class="small mute"></div>
-  </div>
-
-  <div id="swaps" class="card hide">
-    <h2>Late swaps (bulk)</h2>
-    <p class="small mute">Once the contest is live DraftStars only swaps one player for another across every team. The tested rule (F21-F22): swap only when it gains 5+ points per team, or the player is out. Checks the latest saved build against the numbers now.</p>
-    <div class="row"><select id="buildpick" class="grow"></select><button id="swapcheck" class="p">Check swaps</button></div>
-    <div id="swaplist"></div>
+  <div class="pane hide" data-t="swaps">
+    <div id="swaps" class="card hide">
+      <h2>Late swaps (bulk)</h2>
+      <p class="small mute">Once the contest is live DraftStars only swaps one player for another across every team. The tested rule (F21-F22): swap only when it gains 5+ points per team, or the player is out. Checks the latest saved build against the numbers now.</p>
+      <div class="row"><select id="buildpick" class="grow"></select><button id="swapcheck" class="p">Check swaps</button></div>
+      <div id="swaplist"></div>
+    </div>
   </div>
 </section>
 </main>
@@ -107,7 +145,7 @@ const supa = window.supabase.createClient(SUPA_URL, ANON);
 const HIGHS_FACTORY = window.Module;     // highs.js (emscripten) exposes its loader as the global Module in a browser
 const $ = (id) => document.getElementById(id);
 const toast = (m) => { const t = $("toast"); t.textContent = m; t.style.opacity = 1; setTimeout(() => (t.style.opacity = 0), 2600); };
-let S = { slate: null, pool: [], marks: {}, lineups: [], highs: null, session: null, sort: { k: "mix", d: -1 } };
+let S = { slate: null, pool: [], marks: {}, lineups: [], highs: null, session: null, tab: "contests", sort: { k: "mixv", d: -1 } };
 
 // ── sign-in ─────────────────────────────────────────────────────────────
 async function refreshSession() {
@@ -151,6 +189,16 @@ async function api(path, opts = {}) {
   if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
   return j;
 }
+
+// ── tabs ────────────────────────────────────────────────────────────────
+function showTab(t) {
+  S.tab = t;
+  document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b.dataset.t === t));
+  document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("hide", p.dataset.t !== t));
+  $("mixcard").classList.toggle("hide", !S.slate || (t !== "build" && t !== "value"));
+  window.scrollTo({ top: 0 });
+}
+document.querySelectorAll(".tab").forEach((b) => b.onclick = () => showTab(b.dataset.t));
 
 // ── lobby ───────────────────────────────────────────────────────────────
 const money = (v) => (v == null ? "?" : "$" + (+v).toLocaleString(undefined, { maximumFractionDigits: 0 }));
@@ -203,6 +251,8 @@ async function loadSlate(quiet) {
     $("result").classList.add("hide");
     S.marks = {}; S.lineups = [];
     renderPlayers(); fillBuildPick(s.builds);
+    document.querySelectorAll(".tab").forEach((b) => b.disabled = false);
+    showTab("value");
     if (!quiet) toast("Slate loaded");
   } catch (e) { $("slateinfo").innerHTML = `<span class="bad">${e.message}</span>`; }
   $("load").disabled = false;
@@ -225,20 +275,36 @@ for (const k of ["dc", "bm", "rw"]) $("w_" + k).oninput = () => renderPlayers();
 $("usestacks").onchange = () => $("stacks").classList.toggle("hide", !$("usestacks").checked);
 
 // ── players table ───────────────────────────────────────────────────────
-document.querySelectorAll("#ptable th").forEach((th) => th.onclick = () => { const k = th.dataset.k; S.sort = { k, d: S.sort.k === k ? -S.sort.d : -1 }; renderPlayers(); });
+document.querySelectorAll("#ptable th").forEach((th) => th.onclick = () => { const k = th.dataset.k; if (k === "mark") return; S.sort = { k, d: S.sort.k === k ? -S.sort.d : (["name", "team", "pos", "rank"].includes(k) ? 1 : -1) }; renderPlayers(); });
 $("onlyproj").onchange = renderPlayers; $("find").oninput = renderPlayers;
 function renderPlayers() {
   if (!S.slate) return;
   const w = weights();
-  for (const p of S.pool) { p.mix = mixOf(p, w); p.value = p.mix != null && p.salary ? p.mix / (p.salary / 1000) : null; }
+  const par = +$("par").value || 3;
+  const val = (x, sal) => (x == null || !sal ? null : x / (sal / 1000) / par);
+  for (const p of S.pool) {
+    p.mix = mixOf(p, w); p.posStr = (p.posList || []).join("/");
+    p.dcv = val(p.dc, p.salary); p.bmv = val(p.bm, p.salary); p.rwv = val(p.rw, p.salary); p.mixv = val(p.mix, p.salary);
+    p.value = p.mixv; p.mark = S.marks[p.i] === "lock" ? 0 : S.marks[p.i] === "ban" ? 2 : 1;
+  }
   const q = $("find").value.trim().toLowerCase();
   let rows = S.pool.filter((p) => (!$("onlyproj").checked || p.mix != null || S.marks[p.i]) && (!q || p.name.toLowerCase().includes(q)));
   const { k, d } = S.sort;
-  rows.sort((a, b) => { const x = a[k], y = b[k]; if (x == null) return 1; if (y == null) return -1; return (typeof x === "string" ? x.localeCompare(y) : x - y) * d; });
+  const key = k === "pos" ? "posStr" : k === "rank" ? "mixv" : k;
+  rows.sort((a, b) => { const x = a[key], y = b[key]; if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (typeof x === "string" ? x.localeCompare(y) : x - y) * d; });
+  document.querySelectorAll("#ptable th").forEach((th) => { th.classList.toggle("on", th.dataset.k === k); th.classList.toggle("up", th.dataset.k === k && d === 1); });
   const f = (v, dp = 1) => (v == null ? "" : (+v).toFixed(dp));
-  $("ptable").querySelector("tbody").innerHTML = rows.map((p) => `<tr data-i="${p.i}" class="${S.marks[p.i] || ""}">
-    <td>${p.name}${isOut(p) ? ' <span class="bad small">OUT</span>' : ""}${p.player_id == null ? ' <span class="warn small">?</span>' : ""}</td><td>${p.team || ""}</td><td>${(p.posList || []).join("/")}</td>
-    <td>${p.salary ? (p.salary / 1000).toFixed(1) + "k" : ""}</td><td>${f(p.dc)}</td><td>${f(p.bm)}</td><td>${f(p.rw)}</td><td><b>${f(p.mix)}</b></td><td>${f(p.value, 2)}</td></tr>`).join("");
+  const pct = (v) => (v == null ? "" : Math.round(100 * v) + "%");
+  const tint = (v) => (v == null ? "" : v >= 1.1 ? "v3" : v >= 1 ? "v2" : v >= 0.9 ? "v1" : "");
+  const icon = (i) => (S.marks[i] === "lock" ? "🔒" : S.marks[i] === "ban" ? "✕" : "·");
+  $("ptable").querySelector("tbody").innerHTML = rows.map((p, n) => `<tr data-i="${p.i}" class="${S.marks[p.i] || ""}">
+    <td class="c"><span class="mark">${icon(p.i)}</span></td><td class="c mute">${n + 1}</td>
+    <td class="l"><b>${p.name}</b>${isOut(p) ? ' <span class="bad small">OUT</span>' : ""}${p.player_id == null ? ' <span class="warn small" title="no match to our player list">?</span>' : ""}</td>
+    <td class="l">${p.team || ""}</td><td class="l">${p.posStr}</td><td>${p.salary ? "$" + p.salary.toLocaleString() : ""}</td>
+    <td class="grp">${f(p.dc)}</td><td class="${tint(p.dcv)}">${pct(p.dcv)}</td>
+    <td class="grp">${f(p.bm)}</td><td class="${tint(p.bmv)}">${pct(p.bmv)}</td>
+    <td class="grp">${f(p.rw)}</td><td class="${tint(p.rwv)}">${pct(p.rwv)}</td>
+    <td class="grp"><b>${f(p.mix)}</b></td><td class="mixv ${tint(p.mixv)}">${pct(p.mixv)}</td></tr>`).join("");
   $("ptable").querySelectorAll("tbody tr").forEach((tr) => tr.onclick = () => {
     const i = +tr.dataset.i, m = S.marks[i];
     S.marks[i] = m === "lock" ? "ban" : m === "ban" ? undefined : "lock";
@@ -246,6 +312,7 @@ function renderPlayers() {
     renderPlayers();
   });
 }
+$("par").oninput = renderPlayers;
 
 // ── build ───────────────────────────────────────────────────────────────
 async function getHighs() { if (!S.highs) S.highs = await HIGHS_FACTORY({ locateFile: (f) => "https://cdn.jsdelivr.net/npm/highs@1.15.3/build/" + f }); return S.highs; }
