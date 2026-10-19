@@ -31,6 +31,7 @@ th.on::after{content:" ▾"}th.on.up::after{content:" ▴"}
 th.l,td.l{text-align:left}th.c,td.c{text-align:center}
 td.grp,th.grp{border-left:1px solid var(--line)}
 tbody tr:nth-child(even) td{background:var(--zebra)}tbody tr{cursor:pointer}
+button.mk{padding:2px 7px;font-size:13px;margin:0 2px;background:var(--card);border:1px solid var(--line);color:var(--mute);border-radius:6px}button.mk.on{background:var(--acc);color:#fff;border-color:var(--acc)}td.nowrap{white-space:nowrap}
 td.v1{background:var(--v1)!important}td.v2{background:var(--v2)!important}td.v3{background:var(--v3)!important;font-weight:600}
 td.mixv{font-weight:700}
 tr.lock td{background:var(--lock)!important}tr.ban td{background:var(--ban)!important;text-decoration:line-through;color:var(--mute)}
@@ -87,7 +88,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
 
   <div class="pane hide" data-t="value">
     <div id="players" class="card hide">
-      <h2>Value <span class="small mute">tap a header to sort · tap a row: lock → exclude → clear</span></h2>
+      <h2>Value <span class="small mute">tap a header to sort · Lock keeps a player in every lineup, Ex keeps him out</span></h2>
       <div class="row small">
         <label class="chk"><input id="onlyproj" type="checkbox" checked> only players with a number</label>
         <input id="find" type="text" placeholder="find a player" style="max-width:220px">
@@ -95,7 +96,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
       </div>
       <p id="ages2" class="small mute" style="margin:6px 0 0"></p>
       <div class="tablewrap"><table id="ptable"><thead><tr>
-        <th class="c" data-k="mark"></th><th class="c" data-k="rank">#</th><th class="l" data-k="name">Player</th><th class="l" data-k="team">Team</th><th class="l" data-k="pos">Pos</th><th data-k="salary">Price</th>
+        <th class="c" data-k="mark">Lock / Ex</th><th class="c" data-k="rank">#</th><th class="l" data-k="name">Player</th><th class="l" data-k="team">Team</th><th class="l" data-k="pos">Pos</th><th data-k="salary">Price</th>
         <th class="grp" data-k="dc">DC</th><th data-k="dcv">Val</th><th class="grp" data-k="bm">BM</th><th data-k="bmv">Val</th><th class="grp" data-k="rw">RW</th><th data-k="rwv">Val</th>
         <th class="grp" data-k="mix">Mix</th><th data-k="mixv">Val</th>
       </tr></thead><tbody></tbody></table></div>
@@ -112,6 +113,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
         <label class="chk">Max per team <input id="maxteam" type="number" min="1" max="9" value="5" style="width:60px"></label>
         <label class="chk"><input id="usestacks" type="checkbox"> Game stacks</label>
       </div>
+      <p id="markline" class="small mute" style="margin:6px 0 0"></p>
       <div id="stacks" class="hide small">
         <div class="row"><label class="chk">Each lineup from at most <input id="nstack" type="number" min="1" max="9" value="2" style="width:56px"> games</label></div>
         <p class="mute">A maximum: nobody is forced in from any game. Tick which games the lineups may use (the top games by bookmaker total plus key players out are ticked for you; a $9k+ player listed out counts 12 points of total); untick all to let the solver choose from every game. Tested 2024-26: stacks lost in both seasons (FINDINGS F21), so this is your call and off by default.</p>
@@ -321,21 +323,31 @@ function renderPlayers() {
   const f = (v, dp = 1) => (v == null ? "" : (+v).toFixed(dp));
   const pct = (v) => (v == null ? "" : Math.round(100 * v) + "%");
   const tint = (v) => (v == null ? "" : v >= 1.1 ? "v3" : v >= 1 ? "v2" : v >= 0.9 ? "v1" : "");
-  const icon = (i) => (S.marks[i] === "lock" ? "🔒" : S.marks[i] === "ban" ? "✕" : "·");
   $("ptable").querySelector("tbody").innerHTML = rows.map((p, n) => `<tr data-i="${p.i}" class="${S.marks[p.i] || ""}">
-    <td class="c"><span class="mark">${icon(p.i)}</span></td><td class="c mute">${n + 1}</td>
+    <td class="c nowrap"><button class="mk ${S.marks[p.i] === "lock" ? "on" : ""}" data-act="lock" data-i="${p.i}" title="lock into every lineup">🔒</button><button class="mk ${S.marks[p.i] === "ban" ? "on" : ""}" data-act="ban" data-i="${p.i}" title="exclude from every lineup">✕</button></td><td class="c mute">${n + 1}</td>
     <td class="l"><b>${p.name}</b>${isOut(p) ? ' <span class="bad small">OUT</span>' : ""}${p.player_id == null ? ' <span class="warn small" title="no match to our player list">?</span>' : ""}</td>
     <td class="l">${p.team || ""}</td><td class="l">${p.posStr}</td><td>${p.salary ? "$" + p.salary.toLocaleString() : ""}</td>
     <td class="grp">${f(p.dc)}</td><td class="${tint(p.dcv)}">${pct(p.dcv)}</td>
     <td class="grp">${f(p.bm)}</td><td class="${tint(p.bmv)}">${pct(p.bmv)}</td>
     <td class="grp">${f(p.rw)}</td><td class="${tint(p.rwv)}">${pct(p.rwv)}</td>
     <td class="grp"><b>${f(p.mix)}</b></td><td class="mixv ${tint(p.mixv)}">${pct(p.mixv)}</td></tr>`).join("");
-  $("ptable").querySelectorAll("tbody tr").forEach((tr) => tr.onclick = () => {
-    const i = +tr.dataset.i, m = S.marks[i];
-    S.marks[i] = m === "lock" ? "ban" : m === "ban" ? undefined : "lock";
-    if (!S.marks[i]) delete S.marks[i];
+  $("ptable").querySelectorAll("button.mk").forEach((b) => b.onclick = (ev) => {
+    ev.stopPropagation();
+    const i = +b.dataset.i, act = b.dataset.act;
+    if (S.marks[i] === act) delete S.marks[i]; else S.marks[i] = act;   // tap again to clear
     renderPlayers();
   });
+  renderMarks();
+}
+// the Build tab's summary of the locks and excludes set on the Value tab
+function renderMarks() {
+  const el = $("markline"); if (!el) return;
+  const names = (m) => Object.entries(S.marks).filter(([, v]) => v === m).map(([i]) => S.pool[+i]?.name).filter(Boolean);
+  const L = names("lock"), B = names("ban");
+  el.innerHTML = (L.length || B.length)
+    ? `${L.length ? `<b>Locked:</b> ${L.join(", ")}` : ""}${L.length && B.length ? " · " : ""}${B.length ? `<b>Excluded:</b> ${B.join(", ")}` : ""} <button id="clearmarks" class="mk">clear all</button>`
+    : `No locks or excludes. Set them on the Value tab: 🔒 keeps a player in every lineup, ✕ keeps him out.`;
+  const c = $("clearmarks"); if (c) c.onclick = () => { S.marks = {}; renderPlayers(); };
 }
 
 // ── build ───────────────────────────────────────────────────────────────
