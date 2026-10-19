@@ -90,7 +90,6 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
       <h2>Value <span class="small mute">tap a header to sort · tap a row: lock → exclude → clear</span></h2>
       <div class="row small">
         <label class="chk"><input id="onlyproj" type="checkbox" checked> only players with a number</label>
-        <label class="chk">100% value = <input id="par" type="number" min="1" max="6" step="0.1" value="3" style="width:64px"> pts per $1k</label>
         <input id="find" type="text" placeholder="find a player" style="max-width:220px">
       </div>
       <div class="tablewrap"><table id="ptable"><thead><tr>
@@ -98,7 +97,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
         <th class="grp" data-k="dc">DC</th><th data-k="dcv">Val</th><th class="grp" data-k="bm">BM</th><th data-k="bmv">Val</th><th class="grp" data-k="rw">RW</th><th data-k="rwv">Val</th>
         <th class="grp" data-k="mix">Mix</th><th data-k="mixv">Val</th>
       </tr></thead><tbody></tbody></table></div>
-      <p class="small mute" style="margin:8px 0 0">Value = projection ÷ (price ÷ $1,000) ÷ the par above, so 100% is a 300-point team at the $100k cap when par is 3. Green: 90%+, 100%+, 110%+.</p>
+      <p class="small mute" style="margin:8px 0 0">Value = projected points per $1,000 of price. A full $100k lineup at 3.0 scores 300. Green: 2.7+, 3.0+, 3.3+.</p>
     </div>
   </div>
 
@@ -298,8 +297,7 @@ $("onlyproj").onchange = renderPlayers; $("find").oninput = renderPlayers;
 function renderPlayers() {
   if (!S.slate) return;
   const w = weights();
-  const par = +$("par").value || 3;
-  const val = (x, sal) => (x == null || !sal ? null : x / (sal / 1000) / par);
+  const val = (x, sal) => (x == null || !sal ? null : x / (sal / 1000));
   for (const p of S.pool) {
     p.mix = mixOf(p, w); p.posStr = (p.posList || []).join("/");
     p.dcv = val(p.dc, p.salary); p.bmv = val(p.bm, p.salary); p.rwv = val(p.rw, p.salary); p.mixv = val(p.mix, p.salary);
@@ -312,8 +310,8 @@ function renderPlayers() {
   rows.sort((a, b) => { const x = a[key], y = b[key]; if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (typeof x === "string" ? x.localeCompare(y) : x - y) * d; });
   document.querySelectorAll("#ptable th").forEach((th) => { th.classList.toggle("on", th.dataset.k === k); th.classList.toggle("up", th.dataset.k === k && d === 1); });
   const f = (v, dp = 1) => (v == null ? "" : (+v).toFixed(dp));
-  const pct = (v) => (v == null ? "" : Math.round(100 * v) + "%");
-  const tint = (v) => (v == null ? "" : v >= 1.1 ? "v3" : v >= 1 ? "v2" : v >= 0.9 ? "v1" : "");
+  const pct = (v) => (v == null ? "" : (+v).toFixed(1));
+  const tint = (v) => (v == null ? "" : v >= 3.3 ? "v3" : v >= 3 ? "v2" : v >= 2.7 ? "v1" : "");
   const icon = (i) => (S.marks[i] === "lock" ? "🔒" : S.marks[i] === "ban" ? "✕" : "·");
   $("ptable").querySelector("tbody").innerHTML = rows.map((p, n) => `<tr data-i="${p.i}" class="${S.marks[p.i] || ""}">
     <td class="c"><span class="mark">${icon(p.i)}</span></td><td class="c mute">${n + 1}</td>
@@ -330,7 +328,6 @@ function renderPlayers() {
     renderPlayers();
   });
 }
-$("par").oninput = renderPlayers;
 
 // ── build ───────────────────────────────────────────────────────────────
 async function getHighs() { if (!S.highs) S.highs = await HIGHS_FACTORY({ locateFile: (f) => "https://cdn.jsdelivr.net/npm/highs@1.15.3/build/" + f }); return S.highs; }
