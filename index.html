@@ -37,7 +37,7 @@ td.mixv{font-weight:700}
 tr.lock td{background:var(--lock)!important}tr.ban td{background:var(--ban)!important;text-decoration:line-through;color:var(--mute)}
 .mark{display:inline-block;width:22px;text-align:center;color:var(--mute)}
 .pill{display:inline-block;padding:1px 7px;border-radius:999px;border:1px solid var(--line);font-size:12px;margin-right:4px}
-.lu{border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0;font-size:13px}.lu b{font-size:13px}
+.lu{border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0;font-size:13px}.lu b{font-size:13px}.lu.off{opacity:.45}
 .lobbyrow:active{background:var(--zebra)}
 .hide{display:none}.small{font-size:12px}
 label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
@@ -125,6 +125,8 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
       <h2>Lineups</h2>
       <div class="row"><button id="csv">Download DraftStars CSV</button><button id="save" class="p">Save build</button><button id="send">Save to My Teams</button><span id="savemsg" class="mute"></span></div>
     <p id="sendmsg" class="small mute"></p>
+    <div id="dsacct" class="small" style="margin:4px 0 8px"></div>
+      <div class="row small" style="margin-top:6px"><label class="chk"><input id="pickall" type="checkbox" checked> Select all</label><label class="chk">or the first <input id="pickn" type="number" min="1" style="width:60px"> teams</label><span id="pickcount" class="mute"></span></div>
       <div id="lineups"></div>
       <div id="exposure" class="small mute"></div>
     </div>
@@ -157,7 +159,7 @@ const API = "https://gpupsgkyyldqyfemtjml.supabase.co/functions/v1/dfs";
 const HIGHS_FACTORY = window.Module;     // highs.js (emscripten) exposes its loader as the global Module in a browser
 const $ = (id) => document.getElementById(id);
 const toast = (m) => { const t = $("toast"); t.textContent = m; t.style.opacity = 1; setTimeout(() => (t.style.opacity = 0), 2600); };
-let S = { slate: null, pool: [], marks: {}, lineups: [], highs: null, tab: "contests", sort: { k: "mixv", d: -1 } };
+let S = { slate: null, pool: [], marks: {}, lineups: [], pick: new Set(), highs: null, tab: "contests", sort: { k: "mixv", d: -1 } };
 
 // ── sign-in: the shared PIN, remembered on this phone ───────────────────
 const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
@@ -166,7 +168,7 @@ function refreshSession() {
   $("signin").classList.toggle("hide", inApp); $("app").classList.toggle("hide", !inApp);
   $("signout").classList.toggle("hide", !inApp);
   $("who").textContent = inApp ? (store.get("dfs_name") || "Dale") : "";
-  if (inApp) { loadBuildsToday(); if (!S.lobby) loadLobby(); }
+  if (inApp) { loadBuildsToday(); if (!S.lobby) loadLobby(); loadDsAcct(); }
 }
 $("pinok").onclick = async () => {
   const pin = $("pin").value.trim();
@@ -375,7 +377,7 @@ $("build").onclick = async () => {
     const t0 = Date.now();
     const lus = window.Lineup.build(h, pool, rules, +$("nlu").value || 1, { minDiff: +$("mindiff").value || 1, locked: locked.map(([i, s]) => [i, s === "ANY" ? "ANY" : (pool.find((p) => p.i === i)?.pos[0] || s)]), banned, maxGames: stacks ? stacks.maxGames : null, games: stacks && stacks.games.length ? new Set(stacks.games) : null });
     if (!lus.length) throw new Error("no legal lineup: loosen the locks, or allow more games in the stack");
-    S.lineups = lus; S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), stacks };
+    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), stacks };
     renderLineups(pool);
     $("buildmsg").textContent = `${lus.length} lineup(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s`;
     $("result").classList.remove("hide"); $("result").scrollIntoView({ behavior: "smooth" });
@@ -389,22 +391,37 @@ function renderLineups(pool) {
   $("lineups").innerHTML = S.lineups.map((lu, k) => {
     const sal = lu.reduce((a, z) => a + (z.slot === "CAP" ? 1.5 : 1) * by.get(z.i).salary, 0);
     for (const z of lu) counts[z.i] = (counts[z.i] || 0) + 1;
-    return `<div class="lu"><b>#${k + 1}</b> · ${lineupProj(lu, pool).toFixed(1)} pts · $${(sal / 1000).toFixed(1)}k<br>${lu.map((z) => `<span class="pill">${z.slot} ${by.get(z.i).name}</span>`).join("")}</div>`;
+    return `<div class="lu${S.pick.has(k) ? "" : " off"}"><label class="chk"><input type="checkbox" class="lupick" data-k="${k}" ${S.pick.has(k) ? "checked" : ""}> <b>#${k + 1}</b></label> · ${lineupProj(lu, pool).toFixed(1)} pts · $${(sal / 1000).toFixed(1)}k<br>${lu.map((z) => `<span class="pill">${z.slot} ${by.get(z.i).name}</span>`).join("")}</div>`;
   }).join("");
+  S.lastPool = pool;
+  document.querySelectorAll(".lupick").forEach((el) => el.onchange = () => { const k = +el.dataset.k; el.checked ? S.pick.add(k) : S.pick.delete(k); $("pickn").value = ""; renderLineups(pool); });
+  syncPick();
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([i, n]) => `${by.get(+i).name} ${n}`);
   $("exposure").textContent = "In most lineups: " + top.join(" · ");
 }
+// which teams go to My Teams, the CSV and the ledger (owner, 19 Oct 2026):
+// every built team by default, untick some, or "the first N"
+function chosen() { return S.lineups.filter((_, k) => S.pick.has(k)); }
+function syncPick() {
+  const n = S.pick.size, all = S.lineups.length;
+  $("pickall").checked = n === all; $("pickall").indeterminate = n > 0 && n < all;
+  $("pickcount").textContent = `${n} of ${all} selected`;
+  for (const id of ["send", "csv", "save"]) $(id).disabled = n === 0;
+}
+$("pickall").onchange = () => { S.pick = new Set($("pickall").checked ? S.lineups.map((_, k) => k) : []); $("pickn").value = ""; renderLineups(S.lastPool); };
+$("pickn").oninput = () => { const n = Math.max(0, Math.min(S.lineups.length, +$("pickn").value || 0)); if (!$("pickn").value) return; S.pick = new Set(S.lineups.map((_, k) => k).slice(0, n)); renderLineups(S.lastPool); };
 function csvText() {
   const by = new Map(S.pool.map((p) => [p.i, p]));
   const labels = S.slate.rules.captain ? ["CAP", "FLEX", "FLEX", "FLEX", "FLEX", "FLEX"] : Object.entries(S.slate.rules.slots).flatMap(([s, n]) => Array(n).fill(s));
-  return [labels.join(",")].concat(S.lineups.map((lu) => lu.map((z) => by.get(z.i).ds_id).join(","))).join("\n");
+  return [labels.join(",")].concat(chosen().map((lu) => lu.map((z) => by.get(z.i).ds_id).join(","))).join("\n");
 }
 $("send").onclick = async () => {
   // Save to My Teams (owner, 19 Oct 2026): saves the teams for the slate on
   // DraftStars; nothing is entered and nothing is charged. Entering is done
   // from My Teams in the DraftStars app.
-  const c = S.slate.contest, n = S.lineups.length;
-  if (!confirm(`Save ${n} team(s) into My Teams on DraftStars for this slate? Nothing is entered and nothing is charged; you enter them from My Teams in the DraftStars app.`)) return;
+  const c = S.slate.contest, n = chosen().length;
+  if (!n) return;
+  if (!confirm(`Save ${n} team(s) into ${store.get("dfs_name") || "Dale"}'s My Teams on DraftStars for this slate? Nothing is entered and nothing is charged; you enter them from My Teams in the DraftStars app.`)) return;
   $("send").disabled = true; $("sendmsg").textContent = "Saving to My Teams…";
   try {
     const r = await api("/enter", { method: "POST", body: JSON.stringify({ contest_id: c.contest_id, csv: csvText() }) });
@@ -417,6 +434,30 @@ $("send").onclick = async () => {
   } catch (e) { $("sendmsg").innerHTML = `<span class="bad">${e.message}</span>`; }
   $("send").disabled = false;
 };
+// whose DraftStars account Save to My Teams uses: the signed-in name's own
+// token, pasted once here and kept encrypted on the server (Vault)
+async function loadDsAcct() {
+  const el = $("dsacct"); if (!el) return;
+  const who = store.get("dfs_name") || "Dale";
+  try {
+    const r = await api("/dstoken");
+    el.innerHTML = r.connected
+      ? `<span class="ok">Saving to ${who}'s DraftStars account.</span> <a href="#" id="dsre">Replace token</a>`
+      : `<span class="warn">${who}'s DraftStars account isn't connected${r.status === 401 ? " (the saved token has expired)" : ""}.</span> <a href="#" id="dsre">Connect DraftStars</a>`;
+  } catch (e) { el.innerHTML = `<span class="bad">${e.message}</span>`; }
+  const a = $("dsre"); if (a) a.onclick = (ev) => { ev.preventDefault(); showDsForm(); };
+}
+function showDsForm() {
+  const who = store.get("dfs_name") || "Dale";
+  $("dsacct").innerHTML = `<div class="row"><input id="dstok" type="password" autocomplete="off" placeholder="paste ${who}'s DraftStars token (eyJ…)" class="grow"><button id="dssave" class="p">Connect</button><button id="dscancel">Cancel</button></div>
+    <p class="mute" style="margin:4px 0 0">On a computer: log in at play.draftstars.com.au in Chrome, open the developer panel (Network tab), tap into a contest, click a row named <i>challenges</i>, and copy what follows <i>authorization: Bearer</i>. It's checked with DraftStars and stored encrypted; nobody else sees it.</p>`;
+  $("dscancel").onclick = () => loadDsAcct();
+  $("dssave").onclick = async () => {
+    $("dssave").disabled = true;
+    try { await api("/dstoken", { method: "POST", body: JSON.stringify({ token: $("dstok").value }) }); await loadDsAcct(); }
+    catch (e) { $("dssave").disabled = false; $("dsacct").insertAdjacentHTML("beforeend", `<p class="bad">${e.message}</p>`); }
+  };
+}
 $("csv").onclick = () => {
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csvText()], { type: "text/csv" }));
   a.download = `${S.slate.contest.contest_id}-${new Date().toISOString().slice(11, 16).replace(":", "")}-upload.csv`; a.click();
@@ -427,10 +468,10 @@ $("save").onclick = async () => {
     const pool = solverPool();
     const r = await api("/build", { method: "POST", body: JSON.stringify({
       contest_id: S.slate.contest.contest_id, contest_name: S.slate.contest.name, slate_date: S.slate.contest.slate_date, is_captain: S.slate.rules.captain,
-      settings: S.settings, lineups: S.lineups.map((lu) => lu.map((z) => ({ ds_id: by.get(z.i).ds_id, slot: z.slot, player_id: by.get(z.i).player_id, name: by.get(z.i).name }))),
-      projected: S.lineups.map((lu) => +lineupProj(lu, pool).toFixed(2)) }) });
+      settings: { ...S.settings, picked: [...S.pick].sort((a, b) => a - b).map((k) => k + 1) }, lineups: chosen().map((lu) => lu.map((z) => ({ ds_id: by.get(z.i).ds_id, slot: z.slot, player_id: by.get(z.i).player_id, name: by.get(z.i).name }))),
+      projected: chosen().map((lu) => +lineupProj(lu, pool).toFixed(2)) }) });
     $("savemsg").textContent = `Saved as build ${r.build_id}`;
-    S.slate.builds.unshift({ build_id: r.build_id, built_at: r.built_at, lineups: S.lineups.map((lu) => lu.map((z) => ({ ds_id: by.get(z.i).ds_id, slot: z.slot }))), settings: S.settings });
+    S.slate.builds.unshift({ build_id: r.build_id, built_at: r.built_at, lineups: chosen().map((lu) => lu.map((z) => ({ ds_id: by.get(z.i).ds_id, slot: z.slot }))), settings: S.settings });
     fillBuildPick(S.slate.builds);
   } catch (e) { $("savemsg").innerHTML = `<span class="bad">${e.message}</span>`; }
 };
