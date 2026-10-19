@@ -60,6 +60,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     <button class="tab" data-t="value" disabled>Value</button>
     <button class="tab" data-t="build" disabled>Build</button>
     <button class="tab" data-t="swaps" disabled>Swaps</button>
+    <button class="tab" data-t="rapid">Rapid Fire</button>
     <button class="tab" data-t="results">Results</button>
   </nav>
 
@@ -132,6 +133,14 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     </div>
   </div>
 
+  <div class="pane hide" data-t="rapid">
+    <div class="card">
+      <h2>Rapid Fire <span class="small mute">five head-to-heads: who scores more DraftStars points</span></h2>
+      <div class="row small"><button id="rfload">Refresh list</button><span class="mute">Rapid Fire 3 pays 1.8x for 3+ of 5 right (worth it above 55.6%); Rapid Fire 5 pays 20x for all 5 (worth it above 5%).</span></div>
+      <div id="rflist" class="small mute">Open this tab to load.</div>
+      <p class="small mute" style="margin-top:8px">Chances use the mix sliders (shown above once a contest is loaded, else the default), with Drop Coverage's spread for each player where it has one (else a spread from his number). The five match-ups are treated as independent. Not tested on past results: the measurement covers classic contests only. Enter in the DraftStars app.</p>
+    </div>
+  </div>
   <div class="pane hide" data-t="results">
     <div class="card">
       <h2>Results <span class="small mute">paper grades, pooled over nights (PREREG_sources)</span></h2>
@@ -193,9 +202,10 @@ async function api(path, opts = {}) {
 function showTab(t) {
   S.tab = t;
   if (t === "results") loadResults();
+  if (t === "rapid" && !S.rapid) loadRapid();
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b.dataset.t === t));
   document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("hide", p.dataset.t !== t));
-  $("mixcard").classList.toggle("hide", !S.slate || (t !== "build" && t !== "value"));
+  $("mixcard").classList.toggle("hide", t === "rapid" ? false : (!S.slate || (t !== "build" && t !== "value")));
   window.scrollTo({ top: 0 });
 }
 document.querySelectorAll(".tab").forEach((b) => b.onclick = () => showTab(b.dataset.t));
@@ -289,9 +299,9 @@ function mixOf(p, w) {
   return den > 0 ? num / den : null;
 }
 function isOut(p) { return p.status && /out|inj|susp|ir\b/i.test(String(p.status)); }
-for (const k of ["dc", "bm", "rw"]) $("w_" + k).oninput = () => renderPlayers();
-$("even").onclick = () => { for (const k of ["dc", "bm", "rw"]) $("w_" + k).value = 10; renderPlayers(); };
-$("dconly").onclick = () => { $("w_dc").value = 10; $("w_bm").value = 0; $("w_rw").value = 0; renderPlayers(); };
+for (const k of ["dc", "bm", "rw"]) $("w_" + k).oninput = () => { renderPlayers(); renderRapid(); };
+$("even").onclick = () => { for (const k of ["dc", "bm", "rw"]) $("w_" + k).value = 10; renderPlayers(); renderRapid(); };
+$("dconly").onclick = () => { $("w_dc").value = 10; $("w_bm").value = 0; $("w_rw").value = 0; renderPlayers(); renderRapid(); };
 $("usestacks").onchange = () => $("stacks").classList.toggle("hide", !$("usestacks").checked);
 function stackScore(g) { return (g.total || 0) + 12 * (g.key_out || []).length; }
 function renderStacks() {
@@ -475,6 +485,44 @@ $("save").onclick = async () => {
     fillBuildPick(S.slate.builds);
   } catch (e) { $("savemsg").innerHTML = `<span class="bad">${e.message}</span>`; }
 };
+
+// ── Rapid Fire (owner, 19 Oct 2026) ─────────────────────────────────────
+// P(A outscores B) from the mix numbers, normal spreads: Drop Coverage's own
+// sigma where it has one, else 1.6 x sqrt(number). Picks are independent.
+function ncdf(x) { const t = 1 / (1 + 0.2316419 * Math.abs(x)); const d = 0.3989423 * Math.exp(-x * x / 2);
+  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return x > 0 ? 1 - p : p; }
+function rfSide(p, w) { const m = p.ruled_out || isOut(p) ? 0 : mixOf(p, w); const sd = p.dc_sigma && p.dc_sigma > 0 ? p.dc_sigma : 1.6 * Math.sqrt(Math.max(1, m || 1)); return { m, sd }; }
+function atLeast(ps, k) { let d = [1]; for (const p of ps) { const n = new Array(d.length + 1).fill(0); d.forEach((v, i) => { n[i] += v * (1 - p); n[i + 1] += v * p; }); d = n; } return d.slice(k).reduce((a, b) => a + b, 0); }
+async function loadRapid() {
+  $("rflist").textContent = "Loading…";
+  try { S.rapid = await api("/rapidfire"); renderRapid(); }
+  catch (e) { $("rflist").innerHTML = `<span class="bad">${e.message}</span>`; }
+}
+$("rfload").onclick = loadRapid;
+function renderRapid() {
+  if (!S.rapid || !$("rflist")) return;
+  if (!S.rapid.length) { $("rflist").textContent = "No NBA Rapid Fire contests are open on DraftStars right now."; return; }
+  const w = weights(), pct = (x) => Math.round(100 * x) + "%", f = (v) => (v == null ? "–" : (+v).toFixed(1));
+  $("rflist").innerHTML = S.rapid.map((g) => {
+    const rows = g.matchups.map((pair, k) => {
+      const [a, b] = pair, A = rfSide(a, w), B = rfSide(b, w);
+      const known = A.m != null && B.m != null;
+      const pa = known ? ncdf((A.m - B.m) / Math.sqrt(A.sd ** 2 + B.sd ** 2)) : null;
+      const pick = pa == null ? null : pa >= 0.5 ? a : b, pp = pa == null ? null : Math.max(pa, 1 - pa);
+      const who = (x, m) => `<b class="${pick === x ? "ok" : ""}">${x.name}</b> <span class="mute">${x.team || ""}${x.ruled_out || isOut(x) ? ' <span class="bad">OUT</span>' : ""} · ${f(m)}</span>`;
+      return { pp, html: `<tr><td class="c mute">${k + 1}</td><td class="l">${who(a, A.m)}</td><td class="l">${who(b, B.m)}</td><td>${pp == null ? '<span class="warn">no number</span>' : `<b>${pick.name.split(" ").slice(-1)[0]}</b> ${pct(pp)}`}</td></tr>` };
+    });
+    const ps = rows.map((r) => r.pp);
+    const ok = ps.every((p) => p != null);
+    const p3 = ok ? atLeast(ps, 3) : null, p5 = ok ? ps.reduce((a, b) => a * b, 1) : null;
+    const ev = (p, mult) => (p == null ? "–" : `${pct(p)} · returns ${(p * mult).toFixed(2)} per $1 ${p * mult > 1 ? '<span class="ok">(+)</span>' : '<span class="mute">(−)</span>'}`);
+    const tip = g.start_time ? new Date(g.start_time).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : "";
+    const fees = (g.challenges || []).map((c) => `${c.type === "rapidfire_5" ? "RF5" : c.type === "rapidfire_3" ? "RF3" : (c.type || "?")}${c.fee != null ? " $" + c.fee : ""}${c.entered ? " ✓ entered" : ""}`).join(" · ");
+    return `<div class="lu"><b>Locks ${tip}</b> <span class="mute">${fees}</span>
+      <div class="tablewrap"><table><thead><tr><th class="c">#</th><th class="l">Player</th><th class="l">v</th><th>Our pick</th></tr></thead><tbody>${rows.map((r) => r.html).join("")}</tbody></table></div>
+      <div>Rapid Fire 3 (3+ right): ${ev(p3, 1.8)}<br>Rapid Fire 5 (all 5): ${ev(p5, 20)}</div></div>`;
+  }).join("");
+}
 
 // ── results ─────────────────────────────────────────────────────────────
 async function loadResults() {
