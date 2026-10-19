@@ -61,7 +61,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     <button class="tab" data-t="build" disabled>Build</button>
     <button class="tab" data-t="swaps" disabled>Swaps</button>
     <button class="tab" data-t="rapid">Rapid Fire</button>
-    <button class="tab" data-t="results">Results</button>
+    <button class="tab" data-t="results">Measurement</button>
   </nav>
 
   <div class="pane" data-t="contests">
@@ -143,8 +143,9 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
   </div>
   <div class="pane hide" data-t="results">
     <div class="card">
-      <h2>Results <span class="small mute">paper grades, pooled over nights (PREREG_sources)</span></h2>
-      <p class="small mute">Each morning, for every settled $2 and $15 contest, every slider mix is built the tested way and placed in the real field. $15 contests decide; nothing is adopted under 40 nights.</p>
+      <h2>Measurement <span class="small mute">how every slider mix would have done, pooled over nights</span></h2>
+      <p class="small mute">Each night after the games, for every settled $2 and $15 contest, 67 mixes are built the tested way (15 chalk teams at the first tip, bulk swaps before later tips) and placed in the real field: all 66 mixes of DC/BM/RW in 10% steps, plus the even split 33/33/33. ROI = money back ÷ money in − 1. $15 contests decide; nothing is adopted under 40 nights. First grades land about 10pm Sydney on Wed 21 Oct, after opening night.</p>
+      <div class="row small"><span>Teams per contest:</span><button class="mk nq" data-n="15">15</button><button class="mk nq" data-n="10">10</button><button class="mk nq" data-n="5">5</button><button class="mk nq" data-n="1">1</button><label class="chk">or <input id="nteams" type="number" min="1" max="15" value="15" style="width:60px"></label><label class="chk"><input id="allmixes" type="checkbox"> show all 67 mixes</label></div>
       <div id="results">Loading…</div>
     </div>
   </div>
@@ -533,23 +534,45 @@ async function loadResults() {
     const t = { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value }; const tot = t.dc + t.bm + t.rw || 1;
     const curMix = [t.dc, t.bm, t.rw].map((x) => Math.round(100 * x / tot)).join("/");
     let html = "";
+    const x = Math.max(1, Math.min(15, +$("nteams").value || 15)); markNq();
     for (const fee of [15, 2]) {
-      const rows = r.mixes.filter((m) => +m.fee === fee).map((m) => ({ ...m, roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
-      html += `<h2 style="margin-top:12px">$${fee} contests${fee === 15 ? " (decide)" : ""}</h2>`;
+      // the first x teams of each mix entered in every graded contest (k = x;
+      // older rows without per-k grades only count at their full size)
+      const rows = r.mixes.filter((m) => +m.fee === fee && (m.k == null || +m.k === x)).map((m) => ({ ...m, roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
+      html += `<h2 style="margin-top:12px">$${fee} contests${fee === 15 ? " (decide)" : ""} <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest, $${fee * x} a contest</span></h2>`;
       if (!rows.length) { html += `<p class="mute">Nothing graded yet.</p>`; continue; }
-      const show = rows.slice(0, 10); for (const m of rows) if ((m.mix === "100/0/0" || m.mix === curMix) && !show.includes(m)) show.push(m);
-      html += `<div class="tablewrap"><table><thead><tr><th class="l">DC/BM/RW</th><th>nights</th><th>contests</th><th>in</th><th>back</th><th>ROI</th></tr></thead><tbody>`
-        + show.map((m) => `<tr${m.mix === curMix ? ' class="lock"' : ""}><td class="l"><b>${m.mix}</b>${m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : ""}${m.mix === curMix ? " <span class='mute small'>your sliders</span>" : ""}</td><td>${m.slates}</td><td>${m.contests}</td><td>$${m.cost.toFixed(0)}</td><td>$${m.won.toFixed(0)}</td><td class="${m.roi > 0 ? "ok" : "bad"}"><b>${m.roi == null ? "" : (m.roi * 100).toFixed(0) + "%"}</b></td></tr>`).join("") + `</tbody></table></div>`;
+      // top 10 by ROI, plus the default, the even split and your sliders wherever they rank
+      const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === curMix;
+      const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
+      const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");
+      html += `<div class="tablewrap"><table><thead><tr><th class="c">rank</th><th class="l">DC/BM/RW</th><th>nights</th><th>contests</th><th>in</th><th>back</th><th>profit</th><th>ROI</th></tr></thead><tbody>`
+        + show.map((m) => `<tr${m.mix === curMix ? ' class="lock"' : ""}><td class="c mute">${rows.indexOf(m) + 1}</td><td class="l"><b>${m.mix}</b>${tag(m)}</td><td>${m.slates}</td><td>${m.contests}</td><td>$${m.cost.toFixed(0)}</td><td>$${m.won.toFixed(0)}</td><td class="${m.won - m.cost > 0 ? "ok" : "bad"}">${m.won - m.cost < 0 ? "−" : ""}$${Math.abs(m.won - m.cost).toFixed(0)}</td><td class="${m.roi > 0 ? "ok" : "bad"}"><b>${m.roi == null ? "" : (m.roi * 100).toFixed(0) + "%"}</b></td></tr>`).join("") + `</tbody></table></div>`;
       const nights = Math.max(...rows.map((m) => m.slates));
       html += `<p class="small mute">${nights} night(s) graded. ${nights < 40 ? "Descriptive only until 40 nights." : "The adoption bar applies (PREREG_sources.md)."}</p>`;
     }
+    // saved builds; Remove hides one that won't be used (it leaves the
+    // grading and the Swaps list), Restore brings it back
+    const live = r.builds.filter((b) => !b.removed_at), gone = r.builds.filter((b) => b.removed_at);
+    const buildRow = (b) => `<tr><td class="l">${new Date(b.built_at).toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</td><td class="l">${b.contest_name || b.contest_id}${b.entered ? " ✓" : ""}</td><td class="l">${b.built_by || ""}</td><td>${b.n}</td><td class="l">${b.raw ? `${b.raw.dc}/${b.raw.bm}/${b.raw.rw}` : ""}</td><td>${b.cost != null ? "$" + b.cost.toFixed(0) : ""}</td><td>${b.won != null ? "$" + b.won.toFixed(0) : ""}</td><td class="${b.roi > 0 ? "ok" : b.roi != null ? "bad" : "mute"}">${b.roi != null ? (b.roi * 100).toFixed(0) + "%" : "not graded yet"}</td><td><button class="mk rmb" data-id="${b.build_id}" data-undo="${b.removed_at ? 1 : 0}">${b.removed_at ? "Restore" : "Remove"}</button></td></tr>`;
+    const head = `<div class="tablewrap"><table><thead><tr><th class="l">when</th><th class="l">contest</th><th class="l">by</th><th>teams</th><th class="l">mix</th><th>in</th><th>back</th><th>ROI</th><th></th></tr></thead><tbody>`;
     html += `<h2 style="margin-top:12px">Saved builds</h2>`;
-    html += r.builds.length ? `<div class="tablewrap"><table><thead><tr><th class="l">when</th><th class="l">contest</th><th class="l">by</th><th>teams</th><th class="l">mix</th><th>in</th><th>back</th><th>ROI</th></tr></thead><tbody>`
-      + r.builds.map((b) => `<tr><td class="l">${new Date(b.built_at).toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</td><td class="l">${b.contest_name || b.contest_id}${b.entered ? " ✓" : ""}</td><td class="l">${b.built_by || ""}</td><td>${b.n}</td><td class="l">${b.raw ? `${b.raw.dc}/${b.raw.bm}/${b.raw.rw}` : ""}</td><td>${b.cost != null ? "$" + b.cost.toFixed(0) : ""}</td><td>${b.won != null ? "$" + b.won.toFixed(0) : ""}</td><td class="${b.roi > 0 ? "ok" : b.roi != null ? "bad" : "mute"}">${b.roi != null ? (b.roi * 100).toFixed(0) + "%" : "not graded yet"}</td></tr>`).join("") + `</tbody></table></div>`
-      : `<p class="mute">No saved builds yet.</p>`;
+    html += live.length ? head + live.map(buildRow).join("") + `</tbody></table></div>` : `<p class="mute">No saved builds yet.</p>`;
+    if (gone.length) html += `<details style="margin-top:8px"><summary class="small mute">Removed builds (${gone.length})</summary>${head}${gone.map(buildRow).join("")}</tbody></table></div></details>`;
     $("results").innerHTML = html;
+    document.querySelectorAll(".rmb").forEach((btn) => btn.onclick = async () => {
+      const undo = btn.dataset.undo === "1";
+      if (!undo && !confirm("Remove this build? It leaves Results, the Swaps list and the grading. You can restore it from 'Removed builds'.")) return;
+      btn.disabled = true;
+      try { await api("/build/remove", { method: "POST", body: JSON.stringify({ build_id: +btn.dataset.id, undo }) }); loadResults(); }
+      catch (e) { btn.disabled = false; toast(e.message); }
+    });
   } catch (e) { $("results").innerHTML = `<span class="bad">${e.message}</span>`; }
 }
+
+$("allmixes").onchange = loadResults; $("nteams").onchange = loadResults;
+// one-tap team counts (owner, 19 Oct 2026: "entering 15 teams vs entering 10 teams")
+document.querySelectorAll(".nq").forEach((b) => b.onclick = () => { $("nteams").value = b.dataset.n; loadResults(); });
+function markNq() { document.querySelectorAll(".nq").forEach((b) => b.classList.toggle("on", b.dataset.n === String(+$("nteams").value))); }
 
 // ── swaps ───────────────────────────────────────────────────────────────
 function fillBuildPick(builds) {
