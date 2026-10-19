@@ -70,7 +70,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     </div>
     <div class="card">
       <h2>Contest</h2>
-      <div class="row"><input id="contest" type="text" placeholder="tap a contest above, or paste its id / URL" class="grow"><button id="load" class="p">Load</button><button id="refresh" title="Re-read every source">Refresh</button></div>
+      <div class="row"><input id="contest" type="text" placeholder="tap a contest above, or paste its id / URL" class="grow"><button id="load" class="p">Load</button><button id="refresh" title="Fetch Basketball Monster and RotoWire now and re-read Drop Coverage">Refresh projections</button></div>
       <div id="slateinfo" class="mute" style="margin-top:8px"></div>
       <div id="ages" class="small mute"></div>
     </div>
@@ -91,7 +91,9 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
       <div class="row small">
         <label class="chk"><input id="onlyproj" type="checkbox" checked> only players with a number</label>
         <input id="find" type="text" placeholder="find a player" style="max-width:220px">
+        <button id="refresh2" title="Fetch Basketball Monster and RotoWire now and re-read Drop Coverage">Refresh projections</button>
       </div>
+      <p id="ages2" class="small mute" style="margin:6px 0 0"></p>
       <div class="tablewrap"><table id="ptable"><thead><tr>
         <th class="c" data-k="mark"></th><th class="c" data-k="rank">#</th><th class="l" data-k="name">Player</th><th class="l" data-k="team">Team</th><th class="l" data-k="pos">Pos</th><th data-k="salary">Price</th>
         <th class="grp" data-k="dc">DC</th><th data-k="dcv">Val</th><th class="grp" data-k="bm">BM</th><th data-k="bmv">Val</th><th class="grp" data-k="rw">RW</th><th data-k="rwv">Val</th>
@@ -217,17 +219,22 @@ const fmtT = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", mi
 const fmtAge = (iso) => { if (!iso) return "none"; const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + " min ago" : (m / 60).toFixed(1) + " h ago"; };
 function contestIdFrom(s) { s = String(s).trim(); if (!s.includes("/")) return s; const parts = s.split(/[/?#]/).filter((x) => /^[A-Za-z0-9]{6,12}$/.test(x)); return parts.pop() || ""; }
 $("load").onclick = () => loadSlate();
-$("refresh").onclick = async () => {
-  if (!S.slate) { loadSlate(true); return; }
-  $("refresh").disabled = true; $("ages").textContent = "Fetching Basketball Monster and RotoWire now…";
+// Refresh projections (Contests and Value tabs, one handler): fetch BM and
+// RW live inside the function, re-read Drop Coverage, reload the slate.
+async function refreshProjections() {
+  if (!S.slate) { $("ages2").textContent = "Load a contest first (Contests tab)."; loadSlate(true); return; }
+  for (const b of ["refresh", "refresh2"]) $(b).disabled = true;
+  $("ages").textContent = "Fetching Basketball Monster and RotoWire now…"; $("ages2").textContent = $("ages").textContent;
   try {
     const r = await api("/refresh?date=" + encodeURIComponent(S.slate.contest.slate_date || ""));
     const say = (x, label) => x.error ? `<span class="bad">${label}: ${x.error}</span>` : `${label}: ${x.matched} players, ${x.new_values} changed`;
     await loadSlate(true);
     $("ages").innerHTML += `<br>${say(r.bm, "BM")} · ${say(r.rw, "RW")} · Drop Coverage re-read.`;
   } catch (e) { $("ages").innerHTML += ` <span class="bad">Refresh failed: ${e.message}</span>`; }
-  $("refresh").disabled = false;
-};
+  $("ages2").innerHTML = $("ages").innerHTML;
+  for (const b of ["refresh", "refresh2"]) $(b).disabled = false;
+}
+$("refresh").onclick = refreshProjections; $("refresh2").onclick = refreshProjections;
 async function loadSlate(quiet) {
   const id = contestIdFrom($("contest").value);
   if (!id) return;
@@ -241,12 +248,13 @@ async function loadSlate(quiet) {
       + `Tips: ${s.games.map((g) => `${g.away}@${g.home} ${g.tip ? fmtT(g.tip) : "?"}`).join(", ")}<br>`
       + `${S.pool.length} players, ${n} with a Drop Coverage number, ${S.pool.filter((p) => p.player_id == null).length} unmatched names`;
     $("ages").textContent = `Numbers as of — DC: ${fmtAge(s.ages.drop_coverage)} · BM: ${fmtAge(s.ages.basketball_monster)} · RW: ${fmtAge(s.ages.rotowire)}`;
+    $("ages2").textContent = $("ages").textContent;
     // Drop Coverage runs once a day for the day's games; before that run the
     // other sources are all there is, so point the sliders at them
     const have = { bm: S.pool.some((p) => p.bm != null), rw: S.pool.some((p) => p.rw != null) };
     if (!n && (have.bm || have.rw) && +$("w_bm").value === 0 && +$("w_rw").value === 0) {
       $("w_dc").value = 0; $("w_bm").value = have.bm ? 5 : 0; $("w_rw").value = have.rw ? 5 : 0;
-      $("ages").innerHTML += ` <span class="warn">Drop Coverage has no numbers for this slate yet (its run for the day hasn't happened), so the sliders are on ${have.bm && have.rw ? "BM and RW" : have.bm ? "BM" : "RW"} for now. Tap Refresh later and move DC back up when it shows a time.</span>`;
+      $("ages").innerHTML += ` <span class="warn">Drop Coverage has no numbers for this slate yet (its run for the day hasn't happened), so the sliders are on ${have.bm && have.rw ? "BM and RW" : have.bm ? "BM" : "RW"} for now. Tap Refresh projections later and move DC back up when it shows a time.</span>`;
     }
     $("nlu").value = c.is_captain ? 1 : Math.min(15, c.entries_per_person || 15);
     $("maxteam").value = s.rules.maxPerTeam || 5;
