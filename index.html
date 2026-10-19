@@ -112,8 +112,8 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
         <label class="chk"><input id="usestacks" type="checkbox"> Game stacks</label>
       </div>
       <div id="stacks" class="hide small">
-        <div class="row"><label class="chk">Stack <input id="nstack" type="number" min="2" max="9" value="2" style="width:56px"> games</label><label class="chk">at least <input id="kstack" type="number" min="1" max="5" value="3" style="width:56px"> players from each</label></div>
-        <p class="mute">Games ranked by bookmaker total plus key players out (a $9k+ player listed out counts 12 points of total). The top games are ticked for you; untick or tick to override. Tested 2024-26: stacks lost in both seasons (FINDINGS F21), so this is your call and off by default.</p>
+        <div class="row"><label class="chk">Each lineup from at most <input id="nstack" type="number" min="1" max="9" value="2" style="width:56px"> games</label></div>
+        <p class="mute">A maximum: nobody is forced in from any game. Tick which games the lineups may use (the top games by bookmaker total plus key players out are ticked for you; a $9k+ player listed out counts 12 points of total); untick all to let the solver choose from every game. Tested 2024-26: stacks lost in both seasons (FINDINGS F21), so this is your call and off by default.</p>
         <div id="stacklist"></div>
       </div>
       <div class="row" style="margin-top:8px"><button id="build" class="p">Build lineups</button><span id="buildmsg" class="mute"></span></div>
@@ -252,7 +252,7 @@ async function loadSlate(quiet) {
     $("nlu").value = c.is_captain ? 1 : Math.min(15, c.entries_per_person || 15);
     $("maxteam").value = s.rules.maxPerTeam || 5;
     $("mindiff").value = c.is_captain ? 1 : 3;
-    $("nstack").max = Math.max(2, s.games.length); $("nstack").value = Math.min(2, s.games.length);
+    $("nstack").max = Math.max(1, s.games.length); $("nstack").value = s.games.length;      // default: every game (no limit)
     renderStacks();
     for (const el of ["controls", "players", "swaps"]) $(el).classList.remove("hide");
     $("result").classList.add("hide");
@@ -285,7 +285,7 @@ $("usestacks").onchange = () => $("stacks").classList.toggle("hide", !$("usestac
 function stackScore(g) { return (g.total || 0) + 12 * (g.key_out || []).length; }
 function renderStacks() {
   if (!S.slate) return;
-  const n = Math.max(2, Math.min(+$("nstack").value || 2, S.slate.games.length));
+  const n = Math.max(1, Math.min(+$("nstack").value || 2, S.slate.games.length));
   const ranked = [...S.slate.games].sort((a, b) => stackScore(b) - stackScore(a));
   const top = new Set(ranked.slice(0, n).map((g) => g.id));
   $("stacklist").innerHTML = ranked.map((g) => `<label class="chk" style="display:flex"><input type="checkbox" class="stk" data-g="${g.id}" ${top.has(g.id) ? "checked" : ""}> <b>${g.away}@${g.home}</b>&nbsp;· total ${g.total != null ? g.total : "?"}${(g.key_out || []).length ? ` · <span class="warn">out: ${g.key_out.join(", ")}</span>` : ""}</label>`).join("");
@@ -350,16 +350,13 @@ $("build").onclick = async () => {
     let stacks = null;
     if ($("usestacks").checked) {
       const games = [...document.querySelectorAll(".stk:checked")].map((el) => el.dataset.g);
-      const roster = Object.values(rules.slots).reduce((a, b) => a + b, 0);
-      const k = Math.max(1, Math.min(+$("kstack").value || 3, Math.floor(roster / Math.max(games.length, 1))));
-      stacks = games.map((game) => ({ game, k }));
-      if (!stacks.length) stacks = null; else if (k < (+$("kstack").value || 3)) toast(`${games.length} games: at most ${k} from each fits in ${roster} spots`);
+      stacks = { maxGames: Math.max(1, +$("nstack").value || 2), games };
     }
     const pool = solverPool();
     if (!pool.some((p) => p.mean > 0)) throw new Error("no player has a projection in this mix: move up the slider of a source that shows a time under 'Numbers as of'");
     const t0 = Date.now();
-    const lus = window.Lineup.build(h, pool, rules, +$("nlu").value || 1, { minDiff: +$("mindiff").value || 1, locked: locked.map(([i, s]) => [i, s === "ANY" ? "ANY" : (pool.find((p) => p.i === i)?.pos[0] || s)]), banned, stacks });
-    if (!lus.length) throw new Error("no legal lineup: loosen the locks or the stacks");
+    const lus = window.Lineup.build(h, pool, rules, +$("nlu").value || 1, { minDiff: +$("mindiff").value || 1, locked: locked.map(([i, s]) => [i, s === "ANY" ? "ANY" : (pool.find((p) => p.i === i)?.pos[0] || s)]), banned, maxGames: stacks ? stacks.maxGames : null, games: stacks && stacks.games.length ? new Set(stacks.games) : null });
+    if (!lus.length) throw new Error("no legal lineup: loosen the locks, or allow more games in the stack");
     S.lineups = lus; S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), stacks };
     renderLineups(pool);
     $("buildmsg").textContent = `${lus.length} lineup(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s`;
