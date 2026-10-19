@@ -121,7 +121,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     </div>
     <div id="result" class="card hide">
       <h2>Lineups</h2>
-      <div class="row"><button id="csv">Download DraftStars CSV</button><button id="save" class="p">Save build</button><button id="send">Send to My Teams</button><span id="savemsg" class="mute"></span></div>
+      <div class="row"><button id="csv">Download DraftStars CSV</button><button id="save" class="p">Save build</button><button id="send">Save to My Teams</button><span id="savemsg" class="mute"></span></div>
     <p id="sendmsg" class="small mute"></p>
       <div id="lineups"></div>
       <div id="exposure" class="small mute"></div>
@@ -388,13 +388,20 @@ function csvText() {
   return [labels.join(",")].concat(S.lineups.map((lu) => lu.map((z) => by.get(z.i).ds_id).join(","))).join("\n");
 }
 $("send").onclick = async () => {
-  const c = S.slate.contest, n = S.lineups.length, cost = n * (c.entry_fee || 0);
-  if (!confirm(`Enter ${n} team(s) into "${c.name || c.contest_id}" at $${c.entry_fee} each = $${cost.toFixed(2)} from your DraftStars balance?`)) return;
-  $("send").disabled = true; $("sendmsg").textContent = "Sending to DraftStars…";
+  // Save to My Teams (owner, 19 Oct 2026): saves the teams for the slate on
+  // DraftStars; nothing is entered and nothing is charged. Entering is done
+  // from My Teams in the DraftStars app.
+  const c = S.slate.contest, n = S.lineups.length;
+  if (!confirm(`Save ${n} team(s) into My Teams on DraftStars for this slate? Nothing is entered and nothing is charged; you enter them from My Teams in the DraftStars app.`)) return;
+  $("send").disabled = true; $("sendmsg").textContent = "Saving to My Teams…";
   try {
     const r = await api("/enter", { method: "POST", body: JSON.stringify({ contest_id: c.contest_id, csv: csvText() }) });
-    $("sendmsg").innerHTML = r.ok ? `<span class="ok">DraftStars accepted the upload (HTTP ${r.status}). Check My Teams in the DraftStars app.</span> <span class="mute">${(r.body || "").slice(0, 300)}</span>`
-      : `<span class="bad">DraftStars said no${r.status ? " (HTTP " + r.status + ")" : ""}: ${r.error || (r.body || "").slice(0, 400)}</span>`;
+    const fails = Array.isArray(r.failures) ? r.failures : r.failures ? [r.failures] : [];
+    const okN = Array.isArray(r.successes) ? r.successes.length : typeof r.successes === "number" ? r.successes : null;
+    if (r.ok) $("sendmsg").innerHTML = `<span class="ok">DraftStars saved ${okN ?? r.total ?? n} of ${r.teams_sent} team(s) into My Teams${r.slate_name ? " for " + r.slate_name : ""}.</span>`
+      + (fails.length ? ` <span class="bad">${fails.length} failed: ${fails.map((f) => typeof f === "string" ? f : JSON.stringify(f)).join("; ").slice(0, 400)}</span>` : "")
+      + ` <span class="mute">Open the DraftStars app → My Teams to enter them.</span>`;
+    else $("sendmsg").innerHTML = `<span class="bad">DraftStars said no${r.status ? " (HTTP " + r.status + ")" : ""}: ${typeof r.error === "string" ? r.error : JSON.stringify(r.error || r).slice(0, 400)}</span>`;
   } catch (e) { $("sendmsg").innerHTML = `<span class="bad">${e.message}</span>`; }
   $("send").disabled = false;
 };
