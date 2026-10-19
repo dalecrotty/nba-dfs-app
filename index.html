@@ -48,8 +48,8 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
 <main>
 <section id="signin" class="card">
   <h2>Sign in</h2>
-  <p class="mute">Only Dale's and Jack's addresses are allowed. You'll get an email with a link; tap it on this phone.</p>
-  <div class="row"><input id="email" type="email" placeholder="you@example.com" class="grow"><button id="send" class="p">Send link</button></div>
+  <p class="mute">The app is for Dale and Jack. Pick your name and enter the PIN once; this phone remembers it.</p>
+  <div class="row"><select id="who_name" style="max-width:120px"><option>Dale</option><option>Jack</option></select><input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" class="grow" style="max-width:160px"><button id="pinok" class="p">Enter</button></div>
   <p id="signmsg" class="mute"></p>
 </section>
 
@@ -59,6 +59,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     <button class="tab" data-t="value" disabled>Value</button>
     <button class="tab" data-t="build" disabled>Build</button>
     <button class="tab" data-t="swaps" disabled>Swaps</button>
+    <button class="tab" data-t="results">Results</button>
   </nav>
 
   <div class="pane" data-t="contests">
@@ -80,6 +81,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     <div class="slider"><span>DC</span><input type="range" id="w_dc" min="0" max="10" value="10"><span id="v_dc">100%</span></div>
     <div class="slider"><span>BM</span><input type="range" id="w_bm" min="0" max="10" value="0"><span id="v_bm">0%</span></div>
     <div class="slider"><span>RW</span><input type="range" id="w_rw" min="0" max="10" value="0"><span id="v_rw">0%</span></div>
+    <div class="row"><button id="even">Even thirds</button><button id="dconly">Drop Coverage only</button></div>
     <p class="small mute">Shares are the slider values divided by their total. The tested default is 100% Drop Coverage; the Monday report (research/results/sources) says whether a mix has earned a change. A player a source doesn't project gets the others' share.</p>
   </div>
 
@@ -110,16 +112,26 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
         <label class="chk"><input id="usestacks" type="checkbox"> Game stacks</label>
       </div>
       <div id="stacks" class="hide small">
-        <p class="mute">Your call: each lineup takes k+ players from each ticked game. Tested 2024-26: stacking the highest totals lost in both seasons; stacking games missing key players lost 23 points on the blind season (FINDINGS F21). Off by default.</p>
+        <div class="row"><label class="chk">Stack <input id="nstack" type="number" min="2" max="9" value="2" style="width:56px"> games</label><label class="chk">at least <input id="kstack" type="number" min="1" max="5" value="3" style="width:56px"> players from each</label></div>
+        <p class="mute">Games ranked by bookmaker total plus key players out (a $9k+ player listed out counts 12 points of total). The top games are ticked for you; untick or tick to override. Tested 2024-26: stacks lost in both seasons (FINDINGS F21), so this is your call and off by default.</p>
         <div id="stacklist"></div>
       </div>
       <div class="row" style="margin-top:8px"><button id="build" class="p">Build lineups</button><span id="buildmsg" class="mute"></span></div>
     </div>
     <div id="result" class="card hide">
       <h2>Lineups</h2>
-      <div class="row"><button id="csv">Download DraftStars CSV</button><button id="save" class="p">Save build</button><span id="savemsg" class="mute"></span></div>
+      <div class="row"><button id="csv">Download DraftStars CSV</button><button id="save" class="p">Save build</button><button id="send">Send to My Teams</button><span id="savemsg" class="mute"></span></div>
+    <p id="sendmsg" class="small mute"></p>
       <div id="lineups"></div>
       <div id="exposure" class="small mute"></div>
+    </div>
+  </div>
+
+  <div class="pane hide" data-t="results">
+    <div class="card">
+      <h2>Results <span class="small mute">paper grades, pooled over nights (PREREG_sources)</span></h2>
+      <p class="small mute">Each morning, for every settled $2 and $15 contest, every slider mix is built the tested way and placed in the real field. $15 contests decide; nothing is adopted under 40 nights.</p>
+      <div id="results">Loading…</div>
     </div>
   </div>
 
@@ -135,57 +147,39 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
 </main>
 <div id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/highs@1.15.3/build/highs.js"></script>
 <script src="https://gpupsgkyyldqyfemtjml.supabase.co/functions/v1/dfs/lineup.js"></script>
 <script>
-const SUPA_URL = "https://gpupsgkyyldqyfemtjml.supabase.co", ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwdXBzZ2t5eWxkcXlmZW10am1sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NDQ5NjQsImV4cCI6MjA5NzMyMDk2NH0.QKumwzupWA_61YodHozZmHE32HTIlHnoquXxaNzlvBA";
-const API = SUPA_URL + "/functions/v1/dfs";
-const supa = window.supabase.createClient(SUPA_URL, ANON);
+const API = "https://gpupsgkyyldqyfemtjml.supabase.co/functions/v1/dfs";
 const HIGHS_FACTORY = window.Module;     // highs.js (emscripten) exposes its loader as the global Module in a browser
 const $ = (id) => document.getElementById(id);
 const toast = (m) => { const t = $("toast"); t.textContent = m; t.style.opacity = 1; setTimeout(() => (t.style.opacity = 0), 2600); };
-let S = { slate: null, pool: [], marks: {}, lineups: [], highs: null, session: null, tab: "contests", sort: { k: "mixv", d: -1 } };
+let S = { slate: null, pool: [], marks: {}, lineups: [], highs: null, tab: "contests", sort: { k: "mixv", d: -1 } };
 
-// ── sign-in ─────────────────────────────────────────────────────────────
-async function refreshSession() {
-  const { data } = await supa.auth.getSession();
-  S.session = data.session;
-  const inApp = !!S.session;
+// ── sign-in: the shared PIN, remembered on this phone ───────────────────
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
+function refreshSession() {
+  const inApp = !!store.get("dfs_pin");
   $("signin").classList.toggle("hide", inApp); $("app").classList.toggle("hide", !inApp);
   $("signout").classList.toggle("hide", !inApp);
-  $("who").textContent = inApp ? S.session.user.email : "";
+  $("who").textContent = inApp ? (store.get("dfs_name") || "Dale") : "";
   if (inApp) { loadBuildsToday(); if (!S.lobby) loadLobby(); }
 }
-$("send").onclick = async () => {
-  const email = $("email").value.trim();
-  if (!email) return;
-  $("send").disabled = true;
-  const { error } = await supa.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname.replace(/index\.html$/, "") } });
-  $("signmsg").textContent = error ? "Couldn't send: " + error.message : "Sent. Open the email on this phone and tap the link.";
-  $("send").disabled = false;
+$("pinok").onclick = async () => {
+  const pin = $("pin").value.trim();
+  if (!pin) return;
+  store.set("dfs_pin", pin); store.set("dfs_name", $("who_name").value);
+  $("signmsg").textContent = "Checking…";
+  try { await api("/builds"); $("signmsg").textContent = ""; refreshSession(); }
+  catch (e) { store.set("dfs_pin", null); $("signmsg").innerHTML = `<span class="bad">${e.message}</span>`; }
 };
-$("signout").onclick = async () => { await supa.auth.signOut(); location.reload(); };
-supa.auth.onAuthStateChange(() => refreshSession());
-refreshSession();
+$("pin").onkeydown = (e) => { if (e.key === "Enter") $("pinok").click(); };
+$("signout").onclick = () => { store.set("dfs_pin", null); S.slate = null; location.reload(); };
 
-// the signed-in token for an API call: the client's session, else the one
-// we saw last (Chrome on iOS has answered no session seconds after showing
-// one), else one refresh; with none, back to the sign-in panel
-async function token() {
-  let { data } = await supa.auth.getSession();
-  let sess = data.session;
-  if (!sess && S.session && S.session.expires_at * 1000 > Date.now() + 30000) sess = S.session;
-  if (!sess) { try { ({ data } = await supa.auth.refreshSession()); sess = data.session; } catch (e) {} }
-  if (sess) S.session = sess;
-  return sess?.access_token || "";
-}
 async function api(path, opts = {}) {
-  const tok = await token();
-  if (!tok) { await refreshSession(); throw new Error("Your sign-in has lapsed. Enter your email again and tap the new link."); }
-  const r = await fetch(API + "/api" + path, { ...opts, headers: { ...(opts.headers || {}), authorization: "Bearer " + tok, "content-type": "application/json" } });
+  const r = await fetch(API + "/api" + path, { ...opts, headers: { ...(opts.headers || {}), "x-app-pin": store.get("dfs_pin") || "", "x-app-user": store.get("dfs_name") || "Dale", "content-type": "application/json" } });
   const j = await r.json().catch(() => ({}));
-  if (r.status === 401 && j.reason !== "not_allowed") { await supa.auth.signOut().catch(() => {}); await refreshSession(); }
+  if (r.status === 401 && j.reason === "bad_pin") { store.set("dfs_pin", null); refreshSession(); }
   if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
   return j;
 }
@@ -193,6 +187,7 @@ async function api(path, opts = {}) {
 // ── tabs ────────────────────────────────────────────────────────────────
 function showTab(t) {
   S.tab = t;
+  if (t === "results") loadResults();
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b.dataset.t === t));
   document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("hide", p.dataset.t !== t));
   $("mixcard").classList.toggle("hide", !S.slate || (t !== "build" && t !== "value"));
@@ -210,7 +205,8 @@ async function loadLobby() {
     const all = $("allfees").checked;
     const show = rows.filter((c) => all || c.entry_fee === 2 || c.entry_fee === 15);
     if (!show.length) { $("lobby").textContent = rows.length ? "No $2 or $15 NBA contest in the lobby right now (tick 'every entry fee' to see the rest)." : "No NBA contests in the lobby right now."; return; }
-    $("lobby").innerHTML = show.map((c) => `<div class="lu lobbyrow" data-id="${c.contest_id}" style="cursor:pointer"><b>${c.name || c.contest_id}</b> · ${c.is_captain ? "single game" : (c.n_games ?? "?") + " games"} · $${c.entry_fee ?? "?"} · prize pool ${money(c.prize_pool)} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} each · tips ${c.starts_at ? fmtT(c.starts_at) : "?"}</div>`).join("");
+    const payback = (c) => { if (!c.prize_pool || !c.entry_fee) return ""; const full = c.max_entries ? c.prize_pool / (c.entry_fee * c.max_entries) : null; const now = c.entries ? c.prize_pool / (c.entry_fee * c.entries) : null; return ` · pays back ${now != null ? Math.round(100 * Math.min(now, 9.99)) + "% now" : "—"}${full != null ? `, ${Math.round(100 * full)}% if full` : ""}`; };
+    $("lobby").innerHTML = show.map((c) => `<div class="lu lobbyrow" data-id="${c.contest_id}" style="cursor:pointer"><b>${c.name || c.contest_id}</b> · ${c.is_captain ? "single game" : (c.n_games ?? "?") + " games"} · $${c.entry_fee ?? "?"} · prize pool ${money(c.prize_pool)} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} each · tips ${c.starts_at ? fmtT(c.starts_at) : "?"}${payback(c)}</div>`).join("");
     document.querySelectorAll(".lobbyrow").forEach((el) => el.onclick = () => { $("contest").value = el.dataset.id; loadSlate(); window.scrollTo({ top: $("slateinfo").offsetTop - 80, behavior: "smooth" }); });
   } catch (e) { $("lobby").innerHTML = `<span class="bad">${e.message}</span>`; }
 }
@@ -222,7 +218,17 @@ const fmtT = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", mi
 const fmtAge = (iso) => { if (!iso) return "none"; const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + " min ago" : (m / 60).toFixed(1) + " h ago"; };
 function contestIdFrom(s) { s = String(s).trim(); if (!s.includes("/")) return s; const parts = s.split(/[/?#]/).filter((x) => /^[A-Za-z0-9]{6,12}$/.test(x)); return parts.pop() || ""; }
 $("load").onclick = () => loadSlate();
-$("refresh").onclick = () => loadSlate(true);
+$("refresh").onclick = async () => {
+  if (!S.slate) { loadSlate(true); return; }
+  $("refresh").disabled = true; $("ages").textContent = "Fetching Basketball Monster and RotoWire now…";
+  try {
+    const r = await api("/refresh?date=" + encodeURIComponent(S.slate.contest.slate_date || ""));
+    const say = (x, label) => x.error ? `<span class="bad">${label}: ${x.error}</span>` : `${label}: ${x.matched} players, ${x.new_values} changed`;
+    await loadSlate(true);
+    $("ages").innerHTML += `<br>${say(r.bm, "BM")} · ${say(r.rw, "RW")} · Drop Coverage re-read.`;
+  } catch (e) { $("ages").innerHTML += ` <span class="bad">Refresh failed: ${e.message}</span>`; }
+  $("refresh").disabled = false;
+};
 async function loadSlate(quiet) {
   const id = contestIdFrom($("contest").value);
   if (!id) return;
@@ -246,7 +252,8 @@ async function loadSlate(quiet) {
     $("nlu").value = c.is_captain ? 1 : Math.min(15, c.entries_per_person || 15);
     $("maxteam").value = s.rules.maxPerTeam || 5;
     $("mindiff").value = c.is_captain ? 1 : 3;
-    $("stacklist").innerHTML = s.games.map((g) => `<label class="chk"><input type="checkbox" class="stk" data-g="${g.id}"> ${g.away}@${g.home} <select class="stk-k" data-g="${g.id}"><option>2</option><option selected>3</option><option>4</option></select>+</label>`).join("");
+    $("nstack").max = Math.max(2, s.games.length); $("nstack").value = Math.min(2, s.games.length);
+    renderStacks();
     for (const el of ["controls", "players", "swaps"]) $(el).classList.remove("hide");
     $("result").classList.add("hide");
     S.marks = {}; S.lineups = [];
@@ -272,7 +279,18 @@ function mixOf(p, w) {
 }
 function isOut(p) { return p.status && /out|inj|susp|ir\b/i.test(String(p.status)); }
 for (const k of ["dc", "bm", "rw"]) $("w_" + k).oninput = () => renderPlayers();
+$("even").onclick = () => { for (const k of ["dc", "bm", "rw"]) $("w_" + k).value = 10; renderPlayers(); };
+$("dconly").onclick = () => { $("w_dc").value = 10; $("w_bm").value = 0; $("w_rw").value = 0; renderPlayers(); };
 $("usestacks").onchange = () => $("stacks").classList.toggle("hide", !$("usestacks").checked);
+function stackScore(g) { return (g.total || 0) + 12 * (g.key_out || []).length; }
+function renderStacks() {
+  if (!S.slate) return;
+  const n = Math.max(2, Math.min(+$("nstack").value || 2, S.slate.games.length));
+  const ranked = [...S.slate.games].sort((a, b) => stackScore(b) - stackScore(a));
+  const top = new Set(ranked.slice(0, n).map((g) => g.id));
+  $("stacklist").innerHTML = ranked.map((g) => `<label class="chk" style="display:flex"><input type="checkbox" class="stk" data-g="${g.id}" ${top.has(g.id) ? "checked" : ""}> <b>${g.away}@${g.home}</b>&nbsp;· total ${g.total != null ? g.total : "?"}${(g.key_out || []).length ? ` · <span class="warn">out: ${g.key_out.join(", ")}</span>` : ""}</label>`).join("");
+}
+$("nstack").onchange = renderStacks;
 
 // ── players table ───────────────────────────────────────────────────────
 document.querySelectorAll("#ptable th").forEach((th) => th.onclick = () => { const k = th.dataset.k; if (k === "mark") return; S.sort = { k, d: S.sort.k === k ? -S.sort.d : (["name", "team", "pos", "rank"].includes(k) ? 1 : -1) }; renderPlayers(); });
@@ -331,8 +349,11 @@ $("build").onclick = async () => {
     const banned = new Set(Object.entries(S.marks).filter(([, m]) => m === "ban").map(([i]) => +i));
     let stacks = null;
     if ($("usestacks").checked) {
-      stacks = [...document.querySelectorAll(".stk:checked")].map((el) => ({ game: el.dataset.g, k: +document.querySelector(`.stk-k[data-g="${el.dataset.g}"]`).value }));
-      if (!stacks.length) stacks = null;
+      const games = [...document.querySelectorAll(".stk:checked")].map((el) => el.dataset.g);
+      const roster = Object.values(rules.slots).reduce((a, b) => a + b, 0);
+      const k = Math.max(1, Math.min(+$("kstack").value || 3, Math.floor(roster / Math.max(games.length, 1))));
+      stacks = games.map((game) => ({ game, k }));
+      if (!stacks.length) stacks = null; else if (k < (+$("kstack").value || 3)) toast(`${games.length} games: at most ${k} from each fits in ${roster} spots`);
     }
     const pool = solverPool();
     if (!pool.some((p) => p.mean > 0)) throw new Error("no player has a projection in this mix: move up the slider of a source that shows a time under 'Numbers as of'");
@@ -358,11 +379,24 @@ function renderLineups(pool) {
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([i, n]) => `${by.get(+i).name} ${n}`);
   $("exposure").textContent = "In most lineups: " + top.join(" · ");
 }
-$("csv").onclick = () => {
+function csvText() {
   const by = new Map(S.pool.map((p) => [p.i, p]));
   const labels = S.slate.rules.captain ? ["CAP", "FLEX", "FLEX", "FLEX", "FLEX", "FLEX"] : Object.entries(S.slate.rules.slots).flatMap(([s, n]) => Array(n).fill(s));
-  const lines = [labels.join(",")].concat(S.lineups.map((lu) => lu.map((z) => by.get(z.i).ds_id).join(",")));
-  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+  return [labels.join(",")].concat(S.lineups.map((lu) => lu.map((z) => by.get(z.i).ds_id).join(","))).join("\n");
+}
+$("send").onclick = async () => {
+  const c = S.slate.contest, n = S.lineups.length, cost = n * (c.entry_fee || 0);
+  if (!confirm(`Enter ${n} team(s) into "${c.name || c.contest_id}" at $${c.entry_fee} each = $${cost.toFixed(2)} from your DraftStars balance?`)) return;
+  $("send").disabled = true; $("sendmsg").textContent = "Sending to DraftStars…";
+  try {
+    const r = await api("/enter", { method: "POST", body: JSON.stringify({ contest_id: c.contest_id, csv: csvText() }) });
+    $("sendmsg").innerHTML = r.ok ? `<span class="ok">DraftStars accepted the upload (HTTP ${r.status}). Check My Teams in the DraftStars app.</span> <span class="mute">${(r.body || "").slice(0, 300)}</span>`
+      : `<span class="bad">DraftStars said no${r.status ? " (HTTP " + r.status + ")" : ""}: ${r.error || (r.body || "").slice(0, 400)}</span>`;
+  } catch (e) { $("sendmsg").innerHTML = `<span class="bad">${e.message}</span>`; }
+  $("send").disabled = false;
+};
+$("csv").onclick = () => {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csvText()], { type: "text/csv" }));
   a.download = `${S.slate.contest.contest_id}-${new Date().toISOString().slice(11, 16).replace(":", "")}-upload.csv`; a.click();
 };
 $("save").onclick = async () => {
@@ -378,6 +412,33 @@ $("save").onclick = async () => {
     fillBuildPick(S.slate.builds);
   } catch (e) { $("savemsg").innerHTML = `<span class="bad">${e.message}</span>`; }
 };
+
+// ── results ─────────────────────────────────────────────────────────────
+async function loadResults() {
+  $("results").textContent = "Loading…";
+  try {
+    const r = await api("/results");
+    const cur = `${+$("w_dc").value}/${+$("w_bm").value}/${+$("w_rw").value}`;
+    const t = { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value }; const tot = t.dc + t.bm + t.rw || 1;
+    const curMix = [t.dc, t.bm, t.rw].map((x) => Math.round(100 * x / tot)).join("/");
+    let html = "";
+    for (const fee of [15, 2]) {
+      const rows = r.mixes.filter((m) => +m.fee === fee).map((m) => ({ ...m, roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
+      html += `<h2 style="margin-top:12px">$${fee} contests${fee === 15 ? " (decide)" : ""}</h2>`;
+      if (!rows.length) { html += `<p class="mute">Nothing graded yet.</p>`; continue; }
+      const show = rows.slice(0, 10); for (const m of rows) if ((m.mix === "100/0/0" || m.mix === curMix) && !show.includes(m)) show.push(m);
+      html += `<div class="tablewrap"><table><thead><tr><th class="l">DC/BM/RW</th><th>nights</th><th>contests</th><th>in</th><th>back</th><th>ROI</th></tr></thead><tbody>`
+        + show.map((m) => `<tr${m.mix === curMix ? ' class="lock"' : ""}><td class="l"><b>${m.mix}</b>${m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : ""}${m.mix === curMix ? " <span class='mute small'>your sliders</span>" : ""}</td><td>${m.slates}</td><td>${m.contests}</td><td>$${m.cost.toFixed(0)}</td><td>$${m.won.toFixed(0)}</td><td class="${m.roi > 0 ? "ok" : "bad"}"><b>${m.roi == null ? "" : (m.roi * 100).toFixed(0) + "%"}</b></td></tr>`).join("") + `</tbody></table></div>`;
+      const nights = Math.max(...rows.map((m) => m.slates));
+      html += `<p class="small mute">${nights} night(s) graded. ${nights < 40 ? "Descriptive only until 40 nights." : "The adoption bar applies (PREREG_sources.md)."}</p>`;
+    }
+    html += `<h2 style="margin-top:12px">Saved builds</h2>`;
+    html += r.builds.length ? `<div class="tablewrap"><table><thead><tr><th class="l">when</th><th class="l">contest</th><th class="l">by</th><th>teams</th><th class="l">mix</th><th>in</th><th>back</th><th>ROI</th></tr></thead><tbody>`
+      + r.builds.map((b) => `<tr><td class="l">${new Date(b.built_at).toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</td><td class="l">${b.contest_name || b.contest_id}${b.entered ? " ✓" : ""}</td><td class="l">${b.built_by || ""}</td><td>${b.n}</td><td class="l">${b.raw ? `${b.raw.dc}/${b.raw.bm}/${b.raw.rw}` : ""}</td><td>${b.cost != null ? "$" + b.cost.toFixed(0) : ""}</td><td>${b.won != null ? "$" + b.won.toFixed(0) : ""}</td><td class="${b.roi > 0 ? "ok" : b.roi != null ? "bad" : "mute"}">${b.roi != null ? (b.roi * 100).toFixed(0) + "%" : "not graded yet"}</td></tr>`).join("") + `</tbody></table></div>`
+      : `<p class="mute">No saved builds yet.</p>`;
+    $("results").innerHTML = html;
+  } catch (e) { $("results").innerHTML = `<span class="bad">${e.message}</span>`; }
+}
 
 // ── swaps ───────────────────────────────────────────────────────────────
 function fillBuildPick(builds) {
@@ -401,6 +462,7 @@ $("swapcheck").onclick = () => {
   const stuck = [...new Set(r.lineups.flatMap((lu) => lu.map((z) => z.i)))].filter((i) => outNow.has(i));
   if (stuck.length) $("swaplist").innerHTML += `<p class="warn">Still in and out tonight (no legal bulk swap covers every team): ${stuck.map((i) => by.get(i).name).join(", ")}</p>`;
 };
+refreshSession();
 async function loadBuildsToday() { try { const b = await api("/builds"); if (b.length && !$("contest").value) { $("contest").value = b[0].contest_id; } } catch {} }
 </script>
 </body>
