@@ -255,7 +255,7 @@ async function refreshProjections() {
   $("ages").textContent = "Fetching Basketball Monster and RotoWire now…"; $("ages2").textContent = $("ages").textContent;
   try {
     const r = await api("/refresh?date=" + encodeURIComponent(S.slate.contest.slate_date || ""));
-    const say = (x, label) => x.error ? `<span class="bad">${label}: ${x.error}</span>` : `${label}: ${x.matched} players, ${x.new_values} changed`;
+    const say = (x, label) => x.error ? `<span class="bad">${label}: ${x.error}</span>` : `${label}: ${x.matched} players${x.tab ? " (from its " + x.tab + " tab)" : ""}, ${x.new_values} changed`;
     await loadSlate(true);
     $("ages").innerHTML += `<br>${say(r.bm, "BM")} · ${say(r.rw, "RW")} · Drop Coverage re-read.`;
   } catch (e) { $("ages").innerHTML += ` <span class="bad">Refresh failed: ${e.message}</span>`; }
