@@ -556,11 +556,14 @@ async function loadMeasure() {
     const curMix = [t.dc, t.bm, t.rw].map((x) => Math.round(100 * x / tot)).join("/");
     let html = "";
     const x = Math.max(1, Math.min(15, +$("nteams").value || 15)); markNq();
-    for (const fee of [15, 2]) {
+    // multi-game and single game are separate programmes (owner, 20 Oct 2026:
+    // "I want the single game and multi games being graded")
+    for (const [single, fee] of [[false, 15], [false, 2], [true, 15], [true, 2]]) {
       // the first x teams of each mix entered in every graded contest (k = x;
       // older rows without per-k grades only count at their full size)
-      const rows = r.mixes.filter((m) => +m.fee === fee && (m.k == null || +m.k === x)).map((m) => ({ ...m, roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
-      html += `<h2 style="margin-top:12px">$${fee} contests${fee === 15 ? " (decide)" : ""} <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest, $${fee * x} a contest</span></h2>`;
+      const rows = r.mixes.filter((m) => !!m.single === single && +m.fee === fee && (m.k == null || +m.k === x)).map((m) => ({ ...m, roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
+      if (fee === 15) html += `<h2 style="margin-top:16px">${single ? "Single game (captain)" : "Multi-game"}</h2>`;
+      html += `<h3 style="margin-top:8px">$${fee} contests${fee === 15 ? " (decide)" : ""} <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest, $${fee * x} a contest</span></h3>`;
       if (!rows.length) { html += `<p class="mute">Nothing graded yet.</p>`; continue; }
       // top 10 by ROI, plus the default, the even split and your sliders wherever they rank
       const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === curMix;
