@@ -564,11 +564,8 @@ async function loadMeasure() {
       const rows = r.mixes.filter((m) => !!m.single === single && +m.fee === fee && (m.k == null || +m.k === x)).map((m) => ({ ...m, roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
       if (fee === 15) html += `<h2 style="margin-top:16px">${single ? "Single game (captain)" : "Multi-game"}</h2>`;
       html += `<h3 style="margin-top:8px">$${fee} contests${fee === 15 ? " (decide)" : ""} <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest, $${fee * x} a contest</span></h3>`;
-      if (!rows.length) { html += `<p class="mute">Nothing graded yet.</p>`; continue; }
-      // a contest that caps entries per person below x counts its cap (owner, 20 Oct 2026:
-      // "I'm selecting 10 and 15, and it's returning 5")
-      const perContest = rows[0].cost / (fee * rows[0].contests);
-      if (perContest < x - 0.01) html += `<p class="small"><b>Capped:</b> ${rows[0].contests === 1 ? "this contest" : "these contests"} allowed fewer than ${x} teams per person, so ${perContest % 1 ? "an average of " + perContest.toFixed(1) : perContest} team${perContest === 1 ? "" : "s"} per contest ${perContest === 1 ? "is" : "are"} counted, not ${x}.</p>`;
+      // only contests that allowed x teams per person count (owner, 20 Oct 2026)
+      if (!rows.length) { html += `<p class="mute">${r.mixes.some((m) => !!m.single === single && +m.fee === fee) ? `No graded contest allowed ${x} teams per person yet.` : "Nothing graded yet."}</p>`; continue; }
       // top 10 by ROI, plus the default, the even split and your sliders wherever they rank
       const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === curMix;
       const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
