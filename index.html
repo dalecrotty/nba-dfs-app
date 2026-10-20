@@ -61,7 +61,8 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     <button class="tab" data-t="build" disabled>Build</button>
     <button class="tab" data-t="swaps" disabled>Swaps</button>
     <button class="tab" data-t="rapid">Rapid Fire</button>
-    <button class="tab" data-t="results">Measurement</button>
+    <button class="tab" data-t="results">Results</button>
+    <button class="tab" data-t="measure">Measurement</button>
   </nav>
 
   <div class="pane" data-t="contests">
@@ -143,10 +144,21 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
   </div>
   <div class="pane hide" data-t="results">
     <div class="card">
+      <h2>Results <span class="small mute">what we actually entered and what DraftStars paid</span></h2>
+      <p class="small mute">Read from each connected DraftStars account (Dale, Jack) every time this tab opens: finished NBA contests, entries, entry fees (rake included) and prizes. Nothing here is a model: it's the money.</p>
+      <div id="actual">Open this tab to load.</div>
+    </div>
+    <div class="card">
+      <h2>Saved builds <span class="small mute">what the app built; Remove the ones you won't use</span></h2>
+      <div id="builds">Loading…</div>
+    </div>
+  </div>
+  <div class="pane hide" data-t="measure">
+    <div class="card">
       <h2>Measurement <span class="small mute">how every slider mix would have done, pooled over nights</span></h2>
       <p class="small mute">Each night after the games, for every settled $2 and $15 contest, 67 mixes are built the tested way (15 chalk teams at the first tip, bulk swaps before later tips) and placed in the real field: all 66 mixes of DC/BM/RW in 10% steps, plus the even split 33/33/33. ROI = money back ÷ money in − 1. $15 contests decide; nothing is adopted under 40 nights. First grades land about 10pm Sydney on Wed 21 Oct, after opening night.</p>
       <div class="row small"><span>Teams per contest:</span><button class="mk nq" data-n="15">15</button><button class="mk nq" data-n="10">10</button><button class="mk nq" data-n="5">5</button><button class="mk nq" data-n="1">1</button><label class="chk">or <input id="nteams" type="number" min="1" max="15" value="15" style="width:60px"></label><label class="chk"><input id="allmixes" type="checkbox"> show all 67 mixes</label></div>
-      <div id="results">Loading…</div>
+      <div id="results">Open this tab to load.</div>
     </div>
   </div>
 
@@ -203,6 +215,7 @@ async function api(path, opts = {}) {
 function showTab(t) {
   S.tab = t;
   if (t === "results") loadResults();
+  if (t === "measure") loadMeasure();
   if (t === "rapid" && !S.rapid) loadRapid();
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b.dataset.t === t));
   document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("hide", p.dataset.t !== t));
@@ -526,7 +539,7 @@ function renderRapid() {
 }
 
 // ── results ─────────────────────────────────────────────────────────────
-async function loadResults() {
+async function loadMeasure() {
   $("results").textContent = "Loading…";
   try {
     const r = await api("/results");
@@ -550,28 +563,69 @@ async function loadResults() {
       const nights = Math.max(...rows.map((m) => m.slates));
       html += `<p class="small mute">${nights} night(s) graded. ${nights < 40 ? "Descriptive only until 40 nights." : "The adoption bar applies (PREREG_sources.md)."}</p>`;
     }
-    // saved builds; Remove hides one that won't be used (it leaves the
-    // grading and the Swaps list), Restore brings it back
+    $("results").innerHTML = html;
+  } catch (e) { $("results").innerHTML = `<span class="bad">${e.message}</span>`; }
+}
+
+// saved builds (Results tab); Remove hides one that won't be used (it leaves
+// the grading and the Swaps list), Restore brings it back
+async function loadBuilds() {
+  $("builds").textContent = "Loading…";
+  try {
+    const r = await api("/results");
+    let html = "";
     const live = r.builds.filter((b) => !b.removed_at), gone = r.builds.filter((b) => b.removed_at);
     const buildRow = (b) => `<tr><td class="l">${new Date(b.built_at).toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</td><td class="l">${b.contest_name || b.contest_id}${b.entered ? " ✓" : ""}</td><td class="l">${b.built_by || ""}</td><td>${b.n}</td><td class="l">${b.raw ? `${b.raw.dc}/${b.raw.bm}/${b.raw.rw}` : ""}</td><td>${b.cost != null ? "$" + b.cost.toFixed(0) : ""}</td><td>${b.won != null ? "$" + b.won.toFixed(0) : ""}</td><td class="${b.roi > 0 ? "ok" : b.roi != null ? "bad" : "mute"}">${b.roi != null ? (b.roi * 100).toFixed(0) + "%" : "not graded yet"}</td><td><button class="mk rmb" data-id="${b.build_id}" data-undo="${b.removed_at ? 1 : 0}">${b.removed_at ? "Restore" : "Remove"}</button></td></tr>`;
-    const head = `<div class="tablewrap"><table><thead><tr><th class="l">when</th><th class="l">contest</th><th class="l">by</th><th>teams</th><th class="l">mix</th><th>in</th><th>back</th><th>ROI</th><th></th></tr></thead><tbody>`;
-    html += `<h2 style="margin-top:12px">Saved builds</h2>`;
+    const head = `<div class="tablewrap"><table><thead><tr><th class="l">when</th><th class="l">contest</th><th class="l">by</th><th>teams</th><th class="l">mix</th><th>in</th><th>back</th><th>ROI <span class='mute'>(paper)</span></th><th></th></tr></thead><tbody>`;
     html += live.length ? head + live.map(buildRow).join("") + `</tbody></table></div>` : `<p class="mute">No saved builds yet.</p>`;
     if (gone.length) html += `<details style="margin-top:8px"><summary class="small mute">Removed builds (${gone.length})</summary>${head}${gone.map(buildRow).join("")}</tbody></table></div></details>`;
-    $("results").innerHTML = html;
+    $("builds").innerHTML = html;
     document.querySelectorAll(".rmb").forEach((btn) => btn.onclick = async () => {
       const undo = btn.dataset.undo === "1";
       if (!undo && !confirm("Remove this build? It leaves Results, the Swaps list and the grading. You can restore it from 'Removed builds'.")) return;
       btn.disabled = true;
-      try { await api("/build/remove", { method: "POST", body: JSON.stringify({ build_id: +btn.dataset.id, undo }) }); loadResults(); }
+      try { await api("/build/remove", { method: "POST", body: JSON.stringify({ build_id: +btn.dataset.id, undo }) }); loadBuilds(); }
       catch (e) { btn.disabled = false; toast(e.message); }
     });
-  } catch (e) { $("results").innerHTML = `<span class="bad">${e.message}</span>`; }
+  } catch (e) { $("builds").innerHTML = `<span class="bad">${e.message}</span>`; }
 }
 
-$("allmixes").onchange = loadResults; $("nteams").onchange = loadResults;
+
+// ── Results: actual money (owner, 20 Oct 2026) ──────────────────────────
+// each connected person's finished NBA contests, from their DraftStars account
+const cash = (v) => (v < 0 ? "−" : "") + "$" + Math.abs(v).toFixed(2).replace(/\.00$/, "");
+const kindLabel = (k) => ({ classic: "Classic", captain: "Single game", rapidfire_3: "Rapid Fire 3", rapidfire_5: "Rapid Fire 5" }[k] || "Other");
+function sumRows(rows) { const t = { contests: rows.length, entries: 0, cost: 0, won: 0 }; for (const r of rows) { t.entries += r.entries; t.cost += r.cost; t.won += r.won; } t.roi = t.cost ? t.won / t.cost - 1 : null; return t; }
+function summaryRow(label, t) {
+  const p = t.won - t.cost;
+  return `<tr><td class="l"><b>${label}</b></td><td>${t.contests}</td><td>${t.entries}</td><td>${cash(t.cost)}</td><td>${cash(t.won)}</td><td class="${p > 0 ? "ok" : p < 0 ? "bad" : ""}">${cash(p)}</td><td class="${t.roi > 0 ? "ok" : t.roi < 0 ? "bad" : ""}"><b>${t.roi == null ? "" : (t.roi * 100).toFixed(0) + "%"}</b></td></tr>`;
+}
+async function loadResults() {
+  loadBuilds();
+  $("actual").textContent = "Reading DraftStars…";
+  try {
+    const r = await api("/myresults");
+    const rows = r.rows || [];
+    const notes = (r.sync || []).filter((x) => !x.ok).map((x) => `<span class="warn">${x.person}: ${x.error}</span>`).join(" · ");
+    if (!rows.length) { $("actual").innerHTML = `<p class="mute">No finished NBA contests yet. The first ones appear the morning after opening night.</p>${notes ? "<p class='small'>" + notes + "</p>" : ""}`; return; }
+    const people = [...new Set(rows.map((x) => x.person))];
+    const head = `<div class="tablewrap"><table><thead><tr><th class="l"></th><th>contests</th><th>entries</th><th>in</th><th>back</th><th>profit</th><th>ROI</th></tr></thead><tbody>`;
+    let html = head + (people.length > 1 ? summaryRow("Both", sumRows(rows)) : "") + people.map((p) => summaryRow(p, sumRows(rows.filter((x) => x.person === p)))).join("") + `</tbody></table></div>`;
+    // by contest type and entry fee
+    const groups = new Map();
+    for (const x of rows) { const k = `${kindLabel(x.kind)} · $${(+x.fee).toFixed(2).replace(/\.00$/, "")}`; (groups.get(k) || groups.set(k, []).get(k)).push(x); }
+    html += `<h2 style="margin-top:12px">By contest type and fee</h2>` + head + [...groups].sort((a, b) => b[1].length - a[1].length).map(([k, g]) => summaryRow(k, sumRows(g))).join("") + `</tbody></table></div>`;
+    html += `<h2 style="margin-top:12px">Every contest</h2><div class="tablewrap"><table><thead><tr><th class="l">date</th><th class="l">who</th><th class="l">contest</th><th>entries</th><th>in</th><th>back</th><th>profit</th><th>best place</th></tr></thead><tbody>`
+      + rows.map((x) => { const p = x.won - x.cost; return `<tr><td class="l">${x.slate_date || ""}</td><td class="l">${x.person}</td><td class="l">${x.name || x.contest_id} <span class="mute small">${kindLabel(x.kind)}</span></td><td>${x.entries} × ${cash(+x.fee)}</td><td>${cash(x.cost)}</td><td>${cash(x.won)}</td><td class="${p > 0 ? "ok" : p < 0 ? "bad" : ""}">${cash(p)}</td><td>${x.best_position ?? ""}${x.field_size ? " / " + x.field_size : ""}</td></tr>`; }).join("")
+      + `</tbody></table></div>`;
+    if (notes) html += `<p class="small">${notes}</p>`;
+    $("actual").innerHTML = html;
+  } catch (e) { $("actual").innerHTML = `<span class="bad">${e.message}</span>`; }
+}
+
+$("allmixes").onchange = loadMeasure; $("nteams").onchange = loadMeasure;
 // one-tap team counts (owner, 19 Oct 2026: "entering 15 teams vs entering 10 teams")
-document.querySelectorAll(".nq").forEach((b) => b.onclick = () => { $("nteams").value = b.dataset.n; loadResults(); });
+document.querySelectorAll(".nq").forEach((b) => b.onclick = () => { $("nteams").value = b.dataset.n; loadMeasure(); });
 function markNq() { document.querySelectorAll(".nq").forEach((b) => b.classList.toggle("on", b.dataset.n === String(+$("nteams").value))); }
 
 // ── swaps ───────────────────────────────────────────────────────────────
