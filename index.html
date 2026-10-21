@@ -59,7 +59,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     <button class="tab on" data-t="contests">Contests</button>
     <button class="tab" data-t="value" disabled>Value</button>
     <button class="tab" data-t="build" disabled>Build</button>
-    <button class="tab" data-t="swaps" disabled>Swaps</button>
+    <button class="tab" data-t="swaps">Swaps</button>
     <button class="tab" data-t="rapid">Rapid Fire</button>
     <button class="tab" data-t="results">Results</button>
     <button class="tab" data-t="measure">Measurement</button>
@@ -164,6 +164,10 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
   </div>
 
   <div class="pane hide" data-t="swaps">
+    <div class="card">
+      <h2>Your contests today <span class="small mute">the ones with a saved build; they stay here after the lobby drops them at lock</span></h2>
+      <div id="swapcontests">Open this tab to load.</div>
+    </div>
     <div id="swaps" class="card hide">
       <h2>Late swaps (bulk)</h2>
       <p class="small mute">Once the contest is live DraftStars only swaps one player for another across every team. The tested rule (F21-F22): swap only when it gains 5+ points per team, or the player is out. Checks the latest saved build against the numbers now.</p>
@@ -218,6 +222,7 @@ function showTab(t) {
   if (t === "results") loadResults();
   if (t === "measure") loadMeasure();
   if (t === "rapid" && !S.rapid) loadRapid();
+  if (t === "swaps") loadSwapContests();
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b.dataset.t === t));
   document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("hide", p.dataset.t !== t));
   $("mixcard").classList.toggle("hide", t === "rapid" ? false : (!S.slate || (t !== "build" && t !== "value")));
@@ -264,7 +269,27 @@ async function refreshProjections() {
   for (const b of ["refresh", "refresh2"]) $(b).disabled = false;
 }
 $("refresh").onclick = refreshProjections; $("refresh2").onclick = refreshProjections;
-async function loadSlate(quiet) {
+// Swaps tab: today's contests with a saved build, so a contest can be reopened after it
+// locks and leaves the lobby (owner, 21 Oct 2026: "Once the slate starts, the comp
+// disappears and I can't access swaps")
+async function loadSwapContests() {
+  $("swapcontests").textContent = "Loading…";
+  try {
+    const builds = await api("/builds");
+    const by = new Map();
+    for (const b of builds) { const z = by.get(b.contest_id) || by.set(b.contest_id, { id: b.contest_id, name: b.contest_name, n: 0, latest: b.built_at }).get(b.contest_id); z.n++; }
+    const list = [...by.values()];
+    $("swapcontests").innerHTML = list.length
+      ? list.map((c) => `<div class="lu"><b>${c.name || c.id}</b> · ${c.n} saved build${c.n > 1 ? "s" : ""}${S.slateId === c.id ? " · <span class='ok'>open</span>" : ""} <button class="mk opensw" data-id="${c.id}">${S.slateId === c.id ? "reload" : "open"}</button></div>`).join("")
+      : `<p class="mute">No saved build today. Swaps work from a saved build: build, then Save to My Teams or download the CSV, and it's kept.</p>`;
+    document.querySelectorAll(".opensw").forEach((b) => b.onclick = async () => {
+      $("contest").value = b.dataset.id;
+      await loadSlate(true, true);
+      loadSwapContests();
+    });
+  } catch (e) { $("swapcontests").innerHTML = `<span class="bad">${e.message}</span>`; }
+}
+async function loadSlate(quiet, stay) {
   const id = contestIdFrom($("contest").value);
   if (!id) return;
   $("load").disabled = true; $("slateinfo").textContent = "Loading…";
@@ -315,7 +340,7 @@ async function loadSlate(quiet) {
     if (same) S.lineups = keptLineups.map((lu) => lu.map(({ ds, ...z }) => ({ ...z, i: byDs.get(String(ds)) }))).filter((lu) => lu.every((z) => z.i != null));
     renderPlayers(); fillBuildPick(s.builds);
     document.querySelectorAll(".tab").forEach((b) => b.disabled = false);
-    if (!same) showTab("value");
+    if (!same && !stay) showTab("value");
     if (!quiet) toast("Slate loaded");
   } catch (e) { $("slateinfo").innerHTML = `<span class="bad">${e.message}</span>`; }
   $("load").disabled = false;
