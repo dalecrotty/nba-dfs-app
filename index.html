@@ -156,7 +156,8 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
   <div class="pane hide" data-t="measure">
     <div class="card">
       <h2>Measurement <span class="small mute">how every slider mix would have done, pooled over nights</span></h2>
-      <p class="small mute">Each night after the games, for every settled $2 and $15 contest, 67 mixes are built the tested way (15 chalk teams at the first tip, bulk swaps before later tips) and placed in the real field: all 66 mixes of DC/BM/RW in 10% steps, plus the even split 33/33/33. ROI = money back ÷ money in − 1. $15 contests decide; nothing is adopted under 40 nights. First grades land about 10pm Sydney on Wed 21 Oct, after opening night.</p>
+      <p class="small mute">After the games (5pm Sydney, catch-up 8:30pm), for every settled $2 and $15 contest, 67 mixes are built the tested way (chalk teams at the first tip; bulk swaps before later tips in multi-game; captain ×1.5 in single game) and placed in the real field: all 66 mixes of DC/BM/RW in 10% steps, plus the even split 33/33/33, plus the <b>fitted blend</b>: the mix that was most accurate on that slate size's earlier slates (the even split until 3 of them). <b>Accuracy</b> = each mix's average miss in DraftStars points on the players every source carries; it settles far sooner than ROI. ROI = money back ÷ money in − 1. $15 contests decide; nothing is adopted under 40 slates of a size.</p>
+      <div class="row small"><span>Slate size:</span><button class="mk sz on" data-b="all">All</button><button class="mk sz" data-b="single">Single game</button><button class="mk sz" data-b="2-3">2–3 games</button><button class="mk sz" data-b="4-6">4–6 games</button><button class="mk sz" data-b="7+">7+ games</button></div>
       <div class="row small"><span>Teams per contest:</span><button class="mk nq" data-n="15">15</button><button class="mk nq" data-n="10">10</button><button class="mk nq" data-n="5">5</button><button class="mk nq" data-n="1">1</button><label class="chk">or <input id="nteams" type="number" min="1" max="15" value="15" style="width:60px"></label><label class="chk"><input id="allmixes" type="checkbox"> show all 67 mixes</label></div>
       <div id="results">Open this tab to load.</div>
     </div>
@@ -556,24 +557,51 @@ async function loadMeasure() {
     const curMix = [t.dc, t.bm, t.rw].map((x) => Math.round(100 * x / tot)).join("/");
     let html = "";
     const x = Math.max(1, Math.min(15, +$("nteams").value || 15)); markNq();
+    const size = S.measureSize || "all";
+    document.querySelectorAll(".sz").forEach((b) => b.classList.toggle("on", b.dataset.b === size));
+    const SIZES = { single: "Single game", "2-3": "2–3 games", "4-6": "4–6 games", "7+": "7+ games" };
+    // accuracy by slate size (amendment 4): the pure sources, the even split, the most
+    // accurate mix so far, and the fitted blend the next slate of that size will use
+    const acc = r.accuracy || [];
+    html += `<h2 style="margin-top:12px">Accuracy by slate size <span class="small mute">average miss per player, DraftStars points (lower is better)</span></h2>`;
+    for (const b of Object.keys(SIZES).filter((b) => size === "all" || b === size)) {
+      const a = acc.filter((z) => z.bucket === b);
+      html += `<h3 style="margin-top:8px">${SIZES[b]}</h3>`;
+      if (!a.length) { html += `<p class="mute small">No slate of this size graded yet.</p>`; continue; }
+      const by = Object.fromEntries(a.map((z) => [z.mix, z]));
+      const best = [...a].sort((p, q) => p.mae - q.mae)[0];
+      const slates = Math.max(...a.map((z) => z.slates));
+      const next = slates >= 3 ? best.mix : "33/33/33";
+      const line = (label, z) => z ? `<tr><td class="l">${label}</td><td class="l"><b>${z.mix}</b></td><td><b>${z.mae.toFixed(2)}</b></td><td>${z.bias >= 0 ? "+" : "−"}${Math.abs(z.bias).toFixed(2)}</td><td>${z.players}</td><td>${z.slates}</td></tr>` : "";
+      html += `<div class="tablewrap"><table><thead><tr><th class="l"></th><th class="l">DC/BM/RW</th><th>avg miss</th><th>bias</th><th>players</th><th>slates</th></tr></thead><tbody>`
+        + line("Drop Coverage only", by["100/0/0"]) + line("Basketball Monster only", by["0/100/0"]) + line("RotoWire only", by["0/0/100"])
+        + line("Even split", by["33/33/33"]) + line("Most accurate so far", best) + `</tbody></table></div>`
+        + `<p class="small">Fitted blend for the next ${SIZES[b].toLowerCase()} slate: <b>${next}</b> <span class="mute">${slates >= 3 ? `(most accurate over ${slates} slates)` : `(even split until 3 slates; ${slates} so far)`}</span></p>`;
+    }
     // multi-game and single game are separate programmes (owner, 20 Oct 2026:
-    // "I want the single game and multi games being graded")
-    for (const [single, fee] of [[false, 15], [false, 2], [true, 15], [true, 2]]) {
+    // "I want the single game and multi games being graded"); a size narrows to its programme
+    const progs = size === "all" ? [false, true] : [size === "single"];
+    for (const [single, fee] of progs.flatMap((sg) => [[sg, 15], [sg, 2]])) {
       // the first x teams of each mix entered in every graded contest (k = x;
-      // older rows without per-k grades only count at their full size)
-      const rows = r.mixes.filter((m) => !!m.single === single && +m.fee === fee && (m.k == null || +m.k === x)).map((m) => ({ ...m, roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
-      if (fee === 15) html += `<h2 style="margin-top:16px">${single ? "Single game (captain)" : "Multi-game"}</h2>`;
+      // older rows without per-k grades only count at their full size), summed over the slate sizes shown
+      const sum = {};
+      for (const m of r.mixes.filter((m) => !!m.single === single && +m.fee === fee && (m.k == null || +m.k === x) && (size === "all" || m.bucket === size))) {
+        const z = sum[m.mix] || (sum[m.mix] = { mix: m.mix, slates: 0, contests: 0, cost: 0, won: 0 });
+        z.slates += m.slates; z.contests += m.contests; z.cost += m.cost; z.won += m.won;
+      }
+      const rows = Object.values(sum).map((m) => ({ ...m, roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
+      if (fee === 15) html += `<h2 style="margin-top:16px">${single ? "Single game (captain)" : "Multi-game" + (size === "all" ? "" : ", " + SIZES[size])} ROI</h2>`;
       html += `<h3 style="margin-top:8px">$${fee} contests${fee === 15 ? " (decide)" : ""} <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest, $${fee * x} a contest</span></h3>`;
       // only contests that allowed x teams per person count (owner, 20 Oct 2026)
-      if (!rows.length) { html += `<p class="mute">${r.mixes.some((m) => !!m.single === single && +m.fee === fee) ? `No graded contest allowed ${x} teams per person yet.` : "Nothing graded yet."}</p>`; continue; }
+      if (!rows.length) { html += `<p class="mute">${r.mixes.some((m) => !!m.single === single && +m.fee === fee && (size === "all" || m.bucket === size)) ? `No graded contest allowed ${x} teams per person yet.` : "Nothing graded yet."}</p>`; continue; }
       // top 10 by ROI, plus the default, the even split and your sliders wherever they rank
-      const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === curMix;
+      const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === curMix;
       const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
-      const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");
-      html += `<div class="tablewrap"><table><thead><tr><th class="c">rank</th><th class="l">DC/BM/RW</th><th>nights</th><th>contests</th><th>in</th><th>back</th><th>profit</th><th>ROI</th></tr></thead><tbody>`
+      const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === "fitted" ? " <span class='mute small'>most accurate on earlier slates</span>" : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");
+      html += `<div class="tablewrap"><table><thead><tr><th class="c">rank</th><th class="l">DC/BM/RW</th><th>slates</th><th>contests</th><th>in</th><th>back</th><th>profit</th><th>ROI</th></tr></thead><tbody>`
         + show.map((m) => `<tr${m.mix === curMix ? ' class="lock"' : ""}><td class="c mute">${rows.indexOf(m) + 1}</td><td class="l"><b>${m.mix}</b>${tag(m)}</td><td>${m.slates}</td><td>${m.contests}</td><td>$${m.cost.toFixed(0)}</td><td>$${m.won.toFixed(0)}</td><td class="${m.won - m.cost > 0 ? "ok" : "bad"}">${m.won - m.cost < 0 ? "−" : ""}$${Math.abs(m.won - m.cost).toFixed(0)}</td><td class="${m.roi > 0 ? "ok" : "bad"}"><b>${m.roi == null ? "" : (m.roi * 100).toFixed(0) + "%"}</b></td></tr>`).join("") + `</tbody></table></div>`;
       const nights = Math.max(...rows.map((m) => m.slates));
-      html += `<p class="small mute">${nights} night(s) graded. ${nights < 40 ? "Descriptive only until 40 nights." : "The adoption bar applies (PREREG_sources.md)."}</p>`;
+      html += `<p class="small mute">${nights} slate(s) graded. ${nights < 40 ? "Descriptive only until 40 slates." : "The adoption bar applies (PREREG_sources.md)."}</p>`;
     }
     $("results").innerHTML = html;
   } catch (e) { $("results").innerHTML = `<span class="bad">${e.message}</span>`; }
@@ -638,6 +666,7 @@ async function loadResults() {
 $("allmixes").onchange = loadMeasure; $("nteams").onchange = loadMeasure;
 // one-tap team counts (owner, 19 Oct 2026: "entering 15 teams vs entering 10 teams")
 document.querySelectorAll(".nq").forEach((b) => b.onclick = () => { $("nteams").value = b.dataset.n; loadMeasure(); });
+document.querySelectorAll(".sz").forEach((b) => b.onclick = () => { S.measureSize = b.dataset.b; loadMeasure(); });
 function markNq() { document.querySelectorAll(".nq").forEach((b) => b.classList.toggle("on", b.dataset.n === String(+$("nteams").value))); }
 
 // ── swaps ───────────────────────────────────────────────────────────────
