@@ -165,12 +165,12 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
 
   <div class="pane hide" data-t="swaps">
     <div class="card">
-      <h2>Your contests today <span class="small mute">the ones with a saved build; they stay here after the lobby drops them at lock</span></h2>
+      <h2>Your contests today <span class="small mute">entered on DraftStars, or with a saved build; they stay here after the lobby drops them at lock</span></h2>
       <div id="swapcontests">Open this tab to load.</div>
     </div>
     <div id="swaps" class="card hide">
       <h2>Late swaps (bulk)</h2>
-      <p class="small mute">Once the contest is live DraftStars only swaps one player for another across every team. The tested rule (F21-F22): swap only when it gains 5+ points per team, or the player is out. Checks the latest saved build against the numbers now.</p>
+      <p class="small mute">Once the contest is live DraftStars only swaps one player for another across every team. The tested rule (F21-F22): swap only when it gains 5+ points per team, or the player is out. "My entered teams" reads the teams you actually entered straight from DraftStars and checks them on your sliders' mix; a saved build is checked on the mix it was built with. Tap Refresh projections first for the latest numbers.</p>
       <div class="row"><select id="buildpick" class="grow"></select><button id="swapcheck" class="p">Check swaps</button></div>
       <div id="swaplist"></div>
     </div>
@@ -275,13 +275,16 @@ $("refresh").onclick = refreshProjections; $("refresh2").onclick = refreshProjec
 async function loadSwapContests() {
   $("swapcontests").textContent = "Loading…";
   try {
-    const builds = await api("/builds");
+    // the contests you've entered (live or upcoming, from your DraftStars account), plus
+    // any contest with a saved build today
+    const [builds, live] = await Promise.all([api("/builds"), api("/mylive").catch(() => ({ contests: [] }))]);
     const by = new Map();
-    for (const b of builds) { const z = by.get(b.contest_id) || by.set(b.contest_id, { id: b.contest_id, name: b.contest_name, n: 0, latest: b.built_at }).get(b.contest_id); z.n++; }
+    for (const c of live.contests || []) by.set(c.id, { id: c.id, name: c.name, n: 0, entries: c.entries, live: c.live, start: c.start_time });
+    for (const b of builds) { const z = by.get(b.contest_id) || by.set(b.contest_id, { id: b.contest_id, name: b.contest_name, n: 0 }).get(b.contest_id); z.n++; }
     const list = [...by.values()];
     $("swapcontests").innerHTML = list.length
-      ? list.map((c) => `<div class="lu"><b>${c.name || c.id}</b> · ${c.n} saved build${c.n > 1 ? "s" : ""}${S.slateId === c.id ? " · <span class='ok'>open</span>" : ""} <button class="mk opensw" data-id="${c.id}">${S.slateId === c.id ? "reload" : "open"}</button></div>`).join("")
-      : `<p class="mute">No saved build today. Swaps work from a saved build: build, then Save to My Teams or download the CSV, and it's kept.</p>`;
+      ? list.map((c) => `<div class="lu"><b>${c.name || c.id}</b>${c.entries ? ` · ${c.entries} entr${c.entries > 1 ? "ies" : "y"}${c.live ? " · <span class='warn'>live</span>" : c.start ? " · tips " + fmtT(c.start) : ""}` : ""}${c.n ? ` · ${c.n} saved build${c.n > 1 ? "s" : ""}` : ""}${S.slateId === c.id ? " · <span class='ok'>open</span>" : ""} <button class="mk opensw" data-id="${c.id}">${S.slateId === c.id ? "reload" : "open"}</button></div>`).join("")
+      : `<p class="mute">No entered contest or saved build today${live.ok === false && live.error ? ` (${live.error})` : ""}.</p>`;
     document.querySelectorAll(".opensw").forEach((b) => b.onclick = async () => {
       $("contest").value = b.dataset.id;
       await loadSlate(true, true);
@@ -497,6 +500,7 @@ $("send").onclick = async () => {
     const r = await api("/enter", { method: "POST", body: JSON.stringify({ contest_id: c.contest_id, csv: csvText() }) });
     const fails = Array.isArray(r.failures) ? r.failures : r.failures ? [r.failures] : [];
     const okN = Array.isArray(r.successes) ? r.successes.length : typeof r.successes === "number" ? r.successes : null;
+    if (r.ok) { try { await recordBuild(); } catch (_) { /* the ledger is a convenience */ } }
     if (r.ok) $("sendmsg").innerHTML = `<span class="ok">DraftStars saved ${okN ?? r.total ?? n} of ${r.teams_sent} team(s) into My Teams${r.slate_name ? " for " + r.slate_name : ""}.</span>`
       + (fails.length ? ` <span class="bad">${fails.length} failed: ${fails.map((f) => typeof f === "string" ? f : JSON.stringify(f)).join("; ").slice(0, 400)}</span>` : "")
       + ` <span class="mute">Open the DraftStars app → My Teams to enter them.</span>`;
@@ -529,22 +533,37 @@ function showDsForm() {
   };
 }
 $("csv").onclick = () => {
+  recordBuild().catch(() => {});
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csvText()], { type: "text/csv" }));
   a.download = `${S.slate.contest.contest_id}-${new Date().toISOString().slice(11, 16).replace(":", "")}-upload.csv`; a.click();
 };
+// the ledger: Save build, and also Save to My Teams and the CSV download (owner, 21 Oct
+// 2026: the Swaps tab found no saved build after teams went to My Teams); the same
+// teams aren't recorded twice
+async function recordBuild() {
+  const sig = S.slateId + "|" + chosen().map((lu) => lu.map((z) => S.pool[z.i]?.ds_id).sort().join(".")).join("|");
+  if (S.lastSaved && S.lastSaved.sig === sig) return S.lastSaved.r;
+  const r = await saveBuildNow();
+  S.lastSaved = { sig, r };
+  return r;
+}
 $("save").onclick = async () => {
-  try {
+  try { const r = await recordBuild(); $("savemsg").textContent = `Saved as build ${r.build_id}`; }
+  catch (e) { $("savemsg").innerHTML = `<span class="bad">${e.message}</span>`; }
+};
+async function saveBuildNow() {
+  {
     const by = new Map(S.pool.map((p) => [p.i, p]));
     const pool = solverPool();
     const r = await api("/build", { method: "POST", body: JSON.stringify({
       contest_id: S.slate.contest.contest_id, contest_name: S.slate.contest.name, slate_date: S.slate.contest.slate_date, is_captain: S.slate.rules.captain,
       settings: { ...S.settings, picked: [...S.pick].sort((a, b) => a - b).map((k) => k + 1) }, lineups: chosen().map((lu) => lu.map((z) => ({ ds_id: by.get(z.i).ds_id, slot: z.slot, player_id: by.get(z.i).player_id, name: by.get(z.i).name }))),
       projected: chosen().map((lu) => +lineupProj(lu, pool).toFixed(2)) }) });
-    $("savemsg").textContent = `Saved as build ${r.build_id}`;
     S.slate.builds.unshift({ build_id: r.build_id, built_at: r.built_at, lineups: chosen().map((lu) => lu.map((z) => ({ ds_id: by.get(z.i).ds_id, slot: z.slot }))), settings: S.settings });
     fillBuildPick(S.slate.builds);
-  } catch (e) { $("savemsg").innerHTML = `<span class="bad">${e.message}</span>`; }
-};
+    return r;
+  }
+}
 
 // ── Rapid Fire (owner, 19 Oct 2026) ─────────────────────────────────────
 // P(A outscores B) from the mix numbers, normal spreads: Drop Coverage's own
@@ -753,18 +772,28 @@ function markNq() { document.querySelectorAll(".nq").forEach((b) => b.classList.
 
 // ── swaps ───────────────────────────────────────────────────────────────
 function fillBuildPick(builds) {
-  $("buildpick").innerHTML = (builds || []).map((b) => `<option value="${b.build_id}">Build ${b.build_id} · ${new Date(b.built_at).toLocaleString([], { hour: "numeric", minute: "2-digit", day: "numeric", month: "short" })} · ${b.lineups.length} lineups${b.entered ? " · entered" : ""}</option>`).join("") || "<option value=''>no saved build for this contest</option>";
+  $("buildpick").innerHTML = `<option value="ds">My entered teams on DraftStars (read now)</option>` + (builds || []).map((b) => `<option value="${b.build_id}">Build ${b.build_id} · ${new Date(b.built_at).toLocaleString([], { hour: "numeric", minute: "2-digit", day: "numeric", month: "short" })} · ${b.lineups.length} lineups${b.entered ? " · entered" : ""}</option>`).join("");
 }
-$("swapcheck").onclick = () => {
-  const b = (S.slate.builds || []).find((x) => String(x.build_id) === $("buildpick").value);
+$("swapcheck").onclick = async () => {
+  let b = (S.slate.builds || []).find((x) => String(x.build_id) === $("buildpick").value);
+  if ($("buildpick").value === "ds") {
+    // the teams actually entered, from DraftStars, checked on the sliders' mix
+    $("swaplist").textContent = "Reading your entries from DraftStars…";
+    try {
+      const r = await api("/myentries?contest=" + encodeURIComponent(S.slateId));
+      if (!r.ok) { $("swaplist").innerHTML = `<p class="bad">${r.error || "DraftStars said no"}</p>`; return; }
+      if (!r.teams.length) { $("swaplist").innerHTML = `<p class="warn">No entered teams found in this contest for ${store.get("dfs_name") || "Dale"}${r.n_entries ? ` (${r.n_entries} entries listed, but their teams couldn't be read)` : ""}.</p>`; return; }
+      b = { lineups: r.teams.map((t) => t.players), settings: null };
+    } catch (e) { $("swaplist").innerHTML = `<p class="bad">${e.message}</p>`; return; }
+  }
   if (!b) return;
-  const byDs = new Map(S.pool.map((p) => [p.ds_id, p]));
+  const byDs = new Map(S.pool.map((p) => [String(p.ds_id), p]));
   const w = b.settings?.weights || weights();
   const pool = S.pool.filter((p) => p.salary).map((p) => ({ i: p.i, name: p.name, team: p.team, game: p.game, pos: p.posList, salary: p.salary, mean: mixOf(p, w) || 0 }));
   const now = Date.now();
   const started = new Set(S.pool.filter((p) => p.tip && new Date(p.tip).getTime() <= now).map((p) => p.i));
   const outNow = new Set(S.pool.filter((p) => isOut(p) || (p.player_id != null && mixOf(p, w) == null && !started.has(p.i))).map((p) => p.i));   // dropped by every source in the mix = out
-  const lineups = b.lineups.map((lu) => lu.map((z) => ({ i: byDs.get(z.ds_id)?.i, slot: z.slot })).filter((z) => z.i != null));
+  const lineups = b.lineups.map((lu) => lu.map((z) => ({ i: byDs.get(String(z.ds_id))?.i, slot: z.slot })).filter((z) => z.i != null));
   const r = window.Lineup.bulkSwaps(pool, S.slate.rules, lineups, started, outNow, 5);
   const by = new Map(S.pool.map((p) => [p.i, p]));
   $("swaplist").innerHTML = r.swaps.length
