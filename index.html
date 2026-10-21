@@ -560,6 +560,16 @@ async function loadMeasure() {
     const size = S.measureSize || "all";
     document.querySelectorAll(".sz").forEach((b) => b.classList.toggle("on", b.dataset.b === size));
     const SIZES = { single: "Single game", "2-3": "2–3 games", "4-6": "4–6 games", "7+": "7+ games" };
+    // the graded slates, newest first: date, games, size, contests, players compared
+    const sl = (r.slates || []).filter((z) => size === "all" || z.bucket === size);
+    html += `<h2 style="margin-top:12px">Slates graded <span class="small mute">${sl.length}</span></h2>`;
+    if (!sl.length) html += `<p class="mute small">None yet${size === "all" ? "" : " of this size"}.</p>`;
+    else {
+      const gl = (z) => { const g = typeof z.games === "string" ? JSON.parse(z.games) : (z.games || []); return g.map((x) => `${x.away}@${x.home}`).join(", "); };
+      html += `<div class="tablewrap"><table><thead><tr><th class="l">US date</th><th>games</th><th class="l">size</th><th class="l">matchups</th><th>contests</th><th>players</th></tr></thead><tbody>`
+        + sl.map((z) => `<tr><td class="l">${z.slate_date}</td><td><b>${z.n_games}</b></td><td class="l">${SIZES[z.bucket] || z.bucket}</td><td class="l small">${gl(z)}</td><td>${z.contests}</td><td>${z.players ?? ""}</td></tr>`).join("")
+        + `</tbody></table></div>`;
+    }
     // accuracy by slate size (amendment 4): the pure sources, the even split, the most
     // accurate mix so far, and the fitted blend the next slate of that size will use
     const acc = r.accuracy || [];
