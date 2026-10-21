@@ -270,7 +270,13 @@ async function loadSlate(quiet) {
   $("load").disabled = true; $("slateinfo").textContent = "Loading…";
   try {
     const s = await api("/slate?contest=" + encodeURIComponent(id));
-    S.slate = s;
+    // reloading the same contest (Refresh projections) keeps the excludes, locks and build
+    // settings; they are carried by DraftStars id, since the pool's order can change
+    // (owner, 21 Oct 2026: "I excluded Nembhard from all my teams but he still was built into them")
+    const same = !!S.slate && S.slateId === id;
+    const keptMarks = same ? Object.fromEntries(Object.entries(S.marks).map(([i, m]) => [S.pool[+i]?.ds_id, m]).filter(([d]) => d != null)) : {};
+    const keptLineups = same ? (S.lineups || []).map((lu) => lu.map((z) => ({ ...z, ds: S.pool[z.i]?.ds_id }))) : [];
+    S.slate = s; S.slateId = id;
     S.pool = s.pool.map((p, i) => ({ ...p, i, posList: p.pos }));
     const c = s.contest, n = S.pool.filter((p) => p.dc != null).length;
     $("slateinfo").innerHTML = `<b>${c.name || id}</b> · ${c.is_captain ? "single game (captain)" : c.n_games + " games"} · US date ${c.slate_date} · $${c.entry_fee ?? "?"} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} per person<br>`
@@ -293,17 +299,23 @@ async function loadSlate(quiet) {
       $("w_dc").value = 0; $("w_bm").value = have.bm ? 5 : 0; $("w_rw").value = have.rw ? 5 : 0;
       $("ages").innerHTML += ` <span class="warn">Drop Coverage has no numbers for this slate yet (its run for the day hasn't happened), so the sliders are on ${have.bm && have.rw ? "BM and RW" : have.bm ? "BM" : "RW"} for now. Tap Refresh projections later and move DC back up when it shows a time.</span>`;
     }
-    $("nlu").value = c.is_captain ? 1 : Math.min(15, c.entries_per_person || 15);
-    $("maxteam").value = s.rules.maxPerTeam || 5;
-    $("mindiff").value = c.is_captain ? 1 : 3;
-    $("nstack").max = Math.max(1, s.games.length); $("nstack").value = s.games.length;      // default: every game (no limit)
-    renderStacks();
+    if (!same) {              // a new contest starts from its own defaults
+      $("nlu").value = c.is_captain ? 1 : Math.min(15, c.entries_per_person || 15);
+      $("maxteam").value = s.rules.maxPerTeam || 5;
+      $("mindiff").value = c.is_captain ? 1 : 3;
+      $("nstack").max = Math.max(1, s.games.length); $("nstack").value = s.games.length;      // default: every game (no limit)
+      renderStacks();
+      $("result").classList.add("hide");
+      S.lineups = [];
+    }
     for (const el of ["controls", "players", "swaps"]) $(el).classList.remove("hide");
-    $("result").classList.add("hide");
-    S.marks = {}; S.lineups = [];
+    const byDs = new Map(S.pool.map((p) => [String(p.ds_id), p.i]));
+    S.marks = {};
+    for (const [d, m] of Object.entries(keptMarks)) if (byDs.has(String(d))) S.marks[byDs.get(String(d))] = m;
+    if (same) S.lineups = keptLineups.map((lu) => lu.map(({ ds, ...z }) => ({ ...z, i: byDs.get(String(ds)) }))).filter((lu) => lu.every((z) => z.i != null));
     renderPlayers(); fillBuildPick(s.builds);
     document.querySelectorAll(".tab").forEach((b) => b.disabled = false);
-    showTab("value");
+    if (!same) showTab("value");
     if (!quiet) toast("Slate loaded");
   } catch (e) { $("slateinfo").innerHTML = `<span class="bad">${e.message}</span>`; }
   $("load").disabled = false;
