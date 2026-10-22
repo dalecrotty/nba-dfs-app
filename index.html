@@ -675,19 +675,26 @@ async function loadMeasure() {
     // multi-game and single game are separate programmes (owner, 20 Oct 2026:
     // "I want the single game and multi games being graded"); a size narrows to its programme
     const progs = size === "all" ? [false, true] : [size === "single"];
-    for (const [single, fee] of progs.flatMap((sg) => [[sg, 15], [sg, 2]])) {
+    // every fee is graded since 22 Oct 2026 (amendment 5, owner: "measure all regardless of
+    // whether I'm in or not"); $15 decides, $2 beside it, and every fee pooled at $1 an entry
+    // (each contest's money divided by its fee, so a $150 contest weighs what a $0.50 one does)
+    for (const [single, fee] of progs.flatMap((sg) => [[sg, 15], [sg, 2], [sg, "all"]])) {
+      const all = fee === "all";
+      const feeOk = (m) => all || +m.fee === fee;
       // the first x teams of each mix entered in every graded contest (k = x;
       // older rows without per-k grades only count at their full size), summed over the slate sizes shown
       const sum = {};
-      for (const m of r.mixes.filter((m) => !!m.single === single && +m.fee === fee && (m.k == null || +m.k === x) && (size === "all" || m.bucket === size))) {
-        const z = sum[m.mix] || (sum[m.mix] = { mix: m.mix, slates: 0, contests: 0, cost: 0, won: 0 });
-        z.slates += m.slates; z.contests += m.contests; z.cost += m.cost; z.won += m.won;
+      for (const m of r.mixes.filter((m) => !!m.single === single && feeOk(m) && (m.k == null || +m.k === x) && (size === "all" || m.bucket === size))) {
+        const z = sum[m.mix] || (sum[m.mix] = { mix: m.mix, sl: {}, contests: 0, cost: 0, won: 0 });
+        const per = all ? +m.fee || 1 : 1;
+        z.sl[m.bucket] = Math.max(z.sl[m.bucket] || 0, m.slates); z.contests += m.contests; z.cost += m.cost / per; z.won += m.won / per;
       }
-      const rows = Object.values(sum).map((m) => ({ ...m, roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
+      const rows = Object.values(sum).map((m) => ({ ...m, slates: Object.values(m.sl).reduce((a, b) => a + b, 0), roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
       if (fee === 15) html += `<h2 style="margin-top:16px">${single ? "Single game (captain)" : "Multi-game" + (size === "all" ? "" : ", " + SIZES[size])} ROI</h2>`;
-      html += `<h3 style="margin-top:8px">$${fee} contests${fee === 15 ? " (decide)" : ""} <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest, $${fee * x} a contest</span></h3>`;
+      html += all ? `<h3 style="margin-top:8px">Every contest, every fee <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest, pooled at $1 an entry; more data, not the deciding line</span></h3>`
+        : `<h3 style="margin-top:8px">$${fee} contests${fee === 15 ? " (decide)" : ""} <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest, $${fee * x} a contest</span></h3>`;
       // only contests that allowed x teams per person count (owner, 20 Oct 2026)
-      if (!rows.length) { html += `<p class="mute">${r.mixes.some((m) => !!m.single === single && +m.fee === fee && (size === "all" || m.bucket === size)) ? `No graded contest allowed ${x} teams per person yet.` : "Nothing graded yet."}</p>`; continue; }
+      if (!rows.length) { html += `<p class="mute">${r.mixes.some((m) => !!m.single === single && feeOk(m) && (size === "all" || m.bucket === size)) ? `No graded contest allowed ${x} teams per person yet.` : "Nothing graded yet."}</p>`; continue; }
       // top 10 by ROI, plus the default, the even split and your sliders wherever they rank
       const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === curMix;
       const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
