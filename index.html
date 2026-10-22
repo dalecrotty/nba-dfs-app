@@ -675,10 +675,7 @@ async function loadMeasure() {
     // multi-game and single game are separate programmes (owner, 20 Oct 2026:
     // "I want the single game and multi games being graded"); a size narrows to its programme
     const progs = size === "all" ? [false, true] : [size === "single"];
-    // every fee is graded since 22 Oct 2026 (amendment 5, owner: "measure all regardless of
-    // whether I'm in or not"); $15 decides, $2 beside it, and every fee pooled at $1 an entry
-    // (each contest's money divided by its fee, so a $150 contest weighs what a $0.50 one does)
-    for (const [single, fee] of progs.flatMap((sg) => [[sg, 15], [sg, 2], [sg, "all"]])) {
+    for (const [single, fee] of progs.flatMap((sg) => [[sg, 15], [sg, 2]])) {
       const all = fee === "all";
       const feeOk = (m) => all || +m.fee === fee;
       // the first x teams of each mix entered in every graded contest (k = x;
