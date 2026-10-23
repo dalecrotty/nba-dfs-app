@@ -6,8 +6,8 @@
 <title>DFS Cruncher</title>
 <meta name="robots" content="noindex">
 <style>
-:root{--bg:#f3f4f7;--card:#fff;--ink:#17202a;--mute:#6b7280;--line:#e2e5ea;--acc:#3d6fcf;--acc2:#2f5bb0;--ok:#1a7f4b;--warn:#b7791f;--bad:#b3261e;--lock:#e6f4ea;--ban:#fbeaea;--head:#3d6fcf;--zebra:#f7f8fb;--v1:#eef7f0;--v2:#d5eedb;--v3:#b7e2c2}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a20;--ink:#e8e8e4;--mute:#9aa3ad;--line:#2a2f38;--acc:#5b8def;--acc2:#4a7be0;--lock:#15301f;--ban:#3a1d1b;--head:#2f4f8f;--zebra:#1b1f26;--v1:#172a1e;--v2:#1b3a26;--v3:#1f4f30}}
+:root{--bg:#f3f4f7;--card:#fff;--ink:#17202a;--mute:#6b7280;--line:#e2e5ea;--acc:#3d6fcf;--acc2:#2f5bb0;--ok:#1a7f4b;--warn:#b7791f;--bad:#b3261e;--lock:#e6f4ea;--ban:#fbeaea;--head:#3d6fcf;--zebra:#f7f8fb;--v1:#eef7f0;--v2:#d5eedb;--v3:#b7e2c2;--win:#fdf0c4;--top:#fbf7e6}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a20;--ink:#e8e8e4;--mute:#9aa3ad;--line:#2a2f38;--acc:#5b8def;--acc2:#4a7be0;--lock:#15301f;--ban:#3a1d1b;--head:#2f4f8f;--zebra:#1b1f26;--v1:#172a1e;--v2:#1b3a26;--v3:#1f4f30;--win:#4a3d12;--top:#2e2a18}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
 header{padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);background:var(--card)}
 h1{font-size:17px;margin:0}h2{font-size:15px;margin:0 0 8px}
@@ -34,7 +34,7 @@ tbody tr:nth-child(even) td{background:var(--zebra)}tbody tr{cursor:pointer}
 button.mk{padding:2px 7px;font-size:13px;margin:0 2px;background:var(--card);border:1px solid var(--line);color:var(--mute);border-radius:6px}button.mk.on{background:var(--acc);color:#fff;border-color:var(--acc)}td.nowrap{white-space:nowrap}
 td.v1{background:var(--v1)!important}td.v2{background:var(--v2)!important}td.v3{background:var(--v3)!important;font-weight:600}
 td.mixv{font-weight:700}
-tr.lock td{background:var(--lock)!important}tr.ban td{background:var(--ban)!important;text-decoration:line-through;color:var(--mute)}
+tr.lock td{background:var(--lock)!important}tr.win td{background:var(--win)}tr.top td{background:var(--top)}tr.ban td{background:var(--ban)!important;text-decoration:line-through;color:var(--mute)}
 .mark{display:inline-block;width:22px;text-align:center;color:var(--mute)}
 .pill{display:inline-block;padding:1px 7px;border-radius:999px;border:1px solid var(--line);font-size:12px;margin-right:4px}
 .lu{border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0;font-size:13px}.lu b{font-size:13px}.lu.off{opacity:.45}
@@ -712,9 +712,12 @@ async function loadMeasure() {
       // older rows without per-k grades only count at their full size), summed over the slate sizes shown
       const sum = {};
       for (const m of r.mixes.filter((m) => !!m.single === single && feeOk(m) && (m.k == null || +m.k === x) && (size === "all" || m.bucket === size))) {
-        const z = sum[m.mix] || (sum[m.mix] = { mix: m.mix, sl: {}, contests: 0, cost: 0, won: 0 });
+        const z = sum[m.mix] || (sum[m.mix] = { mix: m.mix, sl: {}, contests: 0, cost: 0, won: 0, wins: 0, top10: 0, best: null });
         const per = all ? +m.fee || 1 : 1;
         z.sl[m.bucket] = Math.max(z.sl[m.bucket] || 0, m.slates); z.contests += m.contests; z.cost += m.cost / per; z.won += m.won / per;
+        // would-have-won and top 10 (owner, 23 Oct 2026); best finish in a field of 100+
+        z.wins += m.wins || 0; z.top10 += m.top10 || 0;
+        if (m.best && (!z.best || parseInt(m.best) < parseInt(z.best))) z.best = m.best;
       }
       const rows = Object.values(sum).map((m) => ({ ...m, slates: Object.values(m.sl).reduce((a, b) => a + b, 0), roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
       if (fee === 15) html += `<h2 style="margin-top:16px">${single ? "Single game (captain)" : "Multi-game" + (size === "all" ? "" : ", " + SIZES[size])} ROI <span class="small mute">${period}</span></h2>`;
@@ -723,11 +726,12 @@ async function loadMeasure() {
       // only contests that allowed x teams per person count (owner, 20 Oct 2026)
       if (!rows.length) { html += `<p class="mute">${r.mixes.some((m) => !!m.single === single && feeOk(m) && (size === "all" || m.bucket === size)) ? `No graded contest allowed ${x} teams per person yet.` : "Nothing graded yet."}</p>`; continue; }
       // top 10 by ROI, plus the default, the even split and your sliders wherever they rank
-      const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === curMix;
+      const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === curMix || m.wins > 0 || m.top10 > 0;
       const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
       const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === "fitted" ? " <span class='mute small'>most accurate on earlier slates</span>" : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");
-      html += `<div class="tablewrap"><table><thead><tr><th class="c">rank</th><th class="l">DC/BM/RW</th><th>slates</th><th>contests</th><th>in</th><th>back</th><th>profit</th><th>ROI</th></tr></thead><tbody>`
-        + show.map((m) => `<tr${m.mix === curMix ? ' class="lock"' : ""}><td class="c mute">${rows.indexOf(m) + 1}</td><td class="l"><b>${m.mix}</b>${tag(m)}</td><td>${m.slates}</td><td>${m.contests}</td><td>$${m.cost.toFixed(0)}</td><td>$${m.won.toFixed(0)}</td><td class="${m.won - m.cost > 0 ? "ok" : "bad"}">${m.won - m.cost < 0 ? "−" : ""}$${Math.abs(m.won - m.cost).toFixed(0)}</td><td class="${m.roi > 0 ? "ok" : "bad"}"><b>${m.roi == null ? "" : (m.roi * 100).toFixed(0) + "%"}</b></td></tr>`).join("") + `</tbody></table></div>`;
+      html += `<div class="tablewrap"><table><thead><tr><th class="c">rank</th><th class="l">DC/BM/RW</th><th>slates</th><th>contests</th><th>in</th><th>back</th><th>profit</th><th>ROI</th><th title="contests where its best team would have finished 1st">1st</th><th title="contests of 100+ entries where its best team would have finished in the top 10">top 10</th><th class="l" title="best finish in a contest of 100+ entries">best</th></tr></thead><tbody>`
+        + show.map((m) => `<tr class="${m.mix === curMix ? "lock" : m.wins ? "win" : m.top10 ? "top" : ""}"><td class="c mute">${rows.indexOf(m) + 1}</td><td class="l"><b>${m.mix}</b>${tag(m)}</td><td>${m.slates}</td><td>${m.contests}</td><td>$${m.cost.toFixed(0)}</td><td>$${m.won.toFixed(0)}</td><td class="${m.won - m.cost > 0 ? "ok" : "bad"}">${m.won - m.cost < 0 ? "−" : ""}$${Math.abs(m.won - m.cost).toFixed(0)}</td><td class="${m.roi > 0 ? "ok" : "bad"}"><b>${m.roi == null ? "" : (m.roi * 100).toFixed(0) + "%"}</b></td><td>${m.wins ? "🏆 " + m.wins : ""}</td><td>${m.top10 || ""}</td><td class="l small">${m.best || ""}</td></tr>`).join("") + `</tbody></table></div>`
+        + `<p class="small mute">🏆 = contests where that combo's best team would have finished 1st (any size, 6-player contests included); top 10 and best = contests of 100+ entries only. Gold rows would have won something; pale rows made a top 10. They always show, even outside the top 10 by ROI.</p>`;
       const nights = Math.max(...rows.map((m) => m.slates));
       html += `<p class="small mute">${nights} slate(s) graded. ${nights < 40 ? "Descriptive only until 40 slates." : "The adoption bar applies (PREREG_sources.md)."}</p>`;
     }
