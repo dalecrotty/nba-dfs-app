@@ -157,6 +157,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     <div class="card">
       <h2>Measurement <span class="small mute">how every slider mix would have done, pooled over nights</span></h2>
       <p class="small mute">After the games (5pm Sydney, catch-up 8:30pm), for every settled $2 and $15 contest, 67 mixes are built the tested way (chalk teams at the first tip; bulk swaps before later tips in multi-game; captain ×1.5 in single game) and placed in the real field: all 66 mixes of DC/BM/RW in 10% steps, plus the even split 33/33/33, plus the <b>fitted blend</b>: the mix that was most accurate on that slate size's earlier slates (the even split until 3 of them). <b>Accuracy</b> = each mix's average miss in DraftStars points on the players every source carries; it settles far sooner than ROI. ROI = money back ÷ money in − 1. $15 contests decide; nothing is adopted under 40 slates of a size.</p>
+      <div class="row small"><span>Dates (US):</span><select id="mdates"><option value="all">All dates</option><option value="last">Latest night</option><option value="7">Last 7 nights</option></select></div>
       <div class="row small"><span>Slate size:</span><button class="mk sz on" data-b="all">All</button><button class="mk sz" data-b="single">Single game</button><button class="mk sz" data-b="2-3">2–3 games</button><button class="mk sz" data-b="4-6">4–6 games</button><button class="mk sz" data-b="7+">7+ games</button></div>
       <div class="row small"><span>Teams per contest:</span><button class="mk nq" data-n="15">15</button><button class="mk nq" data-n="10">10</button><button class="mk nq" data-n="5">5</button><button class="mk nq" data-n="1">1</button><label class="chk">or <input id="nteams" type="number" min="1" max="15" value="15" style="width:60px"></label><label class="chk"><input id="allmixes" type="checkbox"> show all 67 mixes</label></div>
       <div id="results">Open this tab to load.</div>
@@ -607,7 +608,33 @@ function renderRapid() {
 async function loadMeasure() {
   $("results").textContent = "Loading…";
   try {
-    const r = await api("/results");
+    // dates (owner, 23 Oct 2026: "a date filter, so I can check how last 1 day performed"):
+    // the latest graded night, the last 7 nights up to it, or one night; the combo to use
+    // next still reads every graded slate
+    const pick = $("mdates").value;
+    const range = (dates) => {
+      if (pick === "all" || !dates.length) return null;
+      const last = dates[0];
+      if (pick === "last") return [last, last];
+      if (pick === "7") { const d = new Date(last + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() - 6); return [d.toISOString().slice(0, 10), last]; }
+      return [pick, pick];
+    };
+    let rg = range(S.measureDates || []);
+    let r = await api("/results" + (rg ? `?from=${rg[0]}&to=${rg[1]}` : ""));
+    const dates = [...new Set((r.slates || []).map((z) => z.slate_date))].sort().reverse();
+    if (pick !== "all" && !S.measureDates) { S.measureDates = dates; rg = range(dates); if (rg) r = await api(`/results?from=${rg[0]}&to=${rg[1]}`); }
+    S.measureDates = dates;
+    {
+      const sel = $("mdates");
+      const want = ["all", "last", "7", ...dates];
+      if ([...sel.options].map((o) => o.value).join() !== want.join()) {
+        sel.innerHTML = `<option value="all">All dates</option><option value="last">Latest night${dates[0] ? " (" + dates[0] + ")" : ""}</option><option value="7">Last 7 nights</option>`
+          + dates.map((d) => `<option value="${d}">${d}</option>`).join("");
+        sel.value = want.includes(pick) ? pick : "all";
+      }
+    }
+    const inRange = (d) => !rg || (d >= rg[0] && d <= rg[1]);
+    const period = rg ? (rg[0] === rg[1] ? rg[0] : `${rg[0]} to ${rg[1]}`) : "all dates";
     const cur = `${+$("w_dc").value}/${+$("w_bm").value}/${+$("w_rw").value}`;
     const t = { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value }; const tot = t.dc + t.bm + t.rw || 1;
     const curMix = [t.dc, t.bm, t.rw].map((x) => Math.round(100 * x / tot)).join("/");
@@ -621,7 +648,7 @@ async function loadMeasure() {
     // rule: most accurate on that size's graded slates, even split until 3), the most accurate
     // and the best $15 ROI at x teams, each with a button that sets the sliders
     {
-      const acc0 = r.accuracy || [];
+      const acc0 = r.accuracy || [], accAll = r.accuracy_all || acc0;
       const roiBest = (b) => {
         const sum = {};
         for (const m of r.mixes.filter((m) => m.bucket === b && +m.fee === 15 && +m.k === x && m.mix !== "fitted")) {
@@ -631,21 +658,23 @@ async function loadMeasure() {
         return v[0] ? { mix: v[0].mix, roi: v[0].won / v[0].cost - 1 } : null;
       };
       const useBtn = (mix) => `<button class="mk usemix" data-mix="${mix}">use</button>`;
-      html += `<h2 style="margin-top:12px">Best combo by slate size <span class="small mute">DC/BM/RW</span></h2><div class="tablewrap"><table><thead><tr><th class="l">Slate</th><th>slates graded</th><th class="l">Use next</th><th class="l">Most accurate</th><th class="l">Best $15 ROI (${x} team${x > 1 ? "s" : ""})</th></tr></thead><tbody>`;
+      html += `<h2 style="margin-top:12px">Best combo by slate size <span class="small mute">DC/BM/RW · ${period}</span></h2><div class="tablewrap"><table><thead><tr><th class="l">Slate</th><th>slates graded</th><th class="l">Use next <span class="mute">(all dates)</span></th><th class="l">Most accurate</th><th class="l">Best $15 ROI (${x} team${x > 1 ? "s" : ""})</th></tr></thead><tbody>`;
       for (const b of Object.keys(SIZES)) {
-        const a = acc0.filter((z) => z.bucket === b);
+        const a = acc0.filter((z) => z.bucket === b), aa = accAll.filter((z) => z.bucket === b);
         const n = a.length ? Math.max(...a.map((z) => z.slates)) : 0;
         const best = a.length ? [...a].sort((p, q) => p.mae - q.mae)[0] : null;
-        const next = n >= 3 && best ? best.mix : "33/33/33";
+        const nAll = aa.length ? Math.max(...aa.map((z) => z.slates)) : 0;
+        const bestAll = aa.length ? [...aa].sort((p, q) => p.mae - q.mae)[0] : null;
+        const next = nAll >= 3 && bestAll ? bestAll.mix : "33/33/33";
         const rb = roiBest(b);
-        html += `<tr><td class="l"><b>${SIZES[b]}</b></td><td>${n}</td><td class="l"><b>${next}</b> ${useBtn(next)}<br><span class="small mute">${n >= 3 ? "most accurate so far" : "even split until 3 slates"}</span></td>`
+        html += `<tr><td class="l"><b>${SIZES[b]}</b></td><td>${n}</td><td class="l"><b>${next}</b> ${useBtn(next)}<br><span class="small mute">${nAll >= 3 ? "most accurate so far" : "even split until 3 slates"}</span></td>`
           + `<td class="l">${best ? `${best.mix} <span class="small mute">miss ${best.mae.toFixed(2)}</span> ${useBtn(best.mix)}` : "<span class='mute'>—</span>"}</td>`
           + `<td class="l">${rb ? `${rb.mix} <span class="small ${rb.roi > 0 ? "ok" : "bad"}">${(rb.roi * 100).toFixed(0)}%</span> ${useBtn(rb.mix)}` : "<span class='mute'>—</span>"}</td></tr>`;
       }
       html += `</tbody></table></div><p class="small mute">"Use next" is the pre-registered pick and the one to trust: accuracy settles in a couple of weeks; ROI needs 40+ slates of a size before it means anything. "use" sets your sliders to that combo.</p>`;
     }
     // the graded slates, newest first: date, games, size, contests, players compared
-    const sl = (r.slates || []).filter((z) => size === "all" || z.bucket === size);
+    const sl = (r.slates || []).filter((z) => (size === "all" || z.bucket === size) && inRange(z.slate_date));
     html += `<h2 style="margin-top:12px">Slates graded <span class="small mute">${sl.length}</span></h2>`;
     if (!sl.length) html += `<p class="mute small">None yet${size === "all" ? "" : " of this size"}.</p>`;
     else {
@@ -657,20 +686,21 @@ async function loadMeasure() {
     // accuracy by slate size (amendment 4): the pure sources, the even split, the most
     // accurate mix so far, and the fitted blend the next slate of that size will use
     const acc = r.accuracy || [];
-    html += `<h2 style="margin-top:12px">Accuracy by slate size <span class="small mute">average miss per player, DraftStars points (lower is better)</span></h2>`;
+    html += `<h2 style="margin-top:12px">Accuracy by slate size <span class="small mute">average miss per player, DraftStars points (lower is better) · ${period}</span></h2>`;
     for (const b of Object.keys(SIZES).filter((b) => size === "all" || b === size)) {
-      const a = acc.filter((z) => z.bucket === b);
+      const a = acc.filter((z) => z.bucket === b), aa = (r.accuracy_all || acc).filter((z) => z.bucket === b);
       html += `<h3 style="margin-top:8px">${SIZES[b]}</h3>`;
-      if (!a.length) { html += `<p class="mute small">No slate of this size graded yet.</p>`; continue; }
+      if (!a.length) { html += `<p class="mute small">No slate of this size graded${rg ? " in " + period : " yet"}.</p>`; continue; }
       const by = Object.fromEntries(a.map((z) => [z.mix, z]));
       const best = [...a].sort((p, q) => p.mae - q.mae)[0];
-      const slates = Math.max(...a.map((z) => z.slates));
-      const next = slates >= 3 ? best.mix : "33/33/33";
+      const slatesAll = aa.length ? Math.max(...aa.map((z) => z.slates)) : 0;
+      const bestAll = aa.length ? [...aa].sort((p, q) => p.mae - q.mae)[0] : best;
+      const next = slatesAll >= 3 ? bestAll.mix : "33/33/33";
       const line = (label, z) => z ? `<tr><td class="l">${label}</td><td class="l"><b>${z.mix}</b></td><td><b>${z.mae.toFixed(2)}</b></td><td>${z.bias >= 0 ? "+" : "−"}${Math.abs(z.bias).toFixed(2)}</td><td>${z.players}</td><td>${z.slates}</td></tr>` : "";
       html += `<div class="tablewrap"><table><thead><tr><th class="l"></th><th class="l">DC/BM/RW</th><th>avg miss</th><th>bias</th><th>players</th><th>slates</th></tr></thead><tbody>`
         + line("Drop Coverage only", by["100/0/0"]) + line("Basketball Monster only", by["0/100/0"]) + line("RotoWire only", by["0/0/100"])
         + line("Even split", by["33/33/33"]) + line("Most accurate so far", best) + `</tbody></table></div>`
-        + `<p class="small">Fitted blend for the next ${SIZES[b].toLowerCase()} slate: <b>${next}</b> <span class="mute">${slates >= 3 ? `(most accurate over ${slates} slates)` : `(even split until 3 slates; ${slates} so far)`}</span></p>`;
+        + `<p class="small">Fitted blend for the next ${SIZES[b].toLowerCase()} slate: <b>${next}</b> <span class="mute">${slatesAll >= 3 ? `(most accurate over all ${slatesAll} slates)` : `(even split until 3 slates; ${slatesAll} so far)`}</span></p>`;
     }
     // multi-game and single game are separate programmes (owner, 20 Oct 2026:
     // "I want the single game and multi games being graded"); a size narrows to its programme
@@ -687,7 +717,7 @@ async function loadMeasure() {
         z.sl[m.bucket] = Math.max(z.sl[m.bucket] || 0, m.slates); z.contests += m.contests; z.cost += m.cost / per; z.won += m.won / per;
       }
       const rows = Object.values(sum).map((m) => ({ ...m, slates: Object.values(m.sl).reduce((a, b) => a + b, 0), roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
-      if (fee === 15) html += `<h2 style="margin-top:16px">${single ? "Single game (captain)" : "Multi-game" + (size === "all" ? "" : ", " + SIZES[size])} ROI</h2>`;
+      if (fee === 15) html += `<h2 style="margin-top:16px">${single ? "Single game (captain)" : "Multi-game" + (size === "all" ? "" : ", " + SIZES[size])} ROI <span class="small mute">${period}</span></h2>`;
       html += all ? `<h3 style="margin-top:8px">Every contest, every fee <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest, pooled at $1 an entry; more data, not the deciding line</span></h3>`
         : `<h3 style="margin-top:8px">$${fee} contests${fee === 15 ? " (decide)" : ""} <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest, $${fee * x} a contest</span></h3>`;
       // only contests that allowed x teams per person count (owner, 20 Oct 2026)
@@ -768,7 +798,7 @@ async function loadResults() {
   } catch (e) { $("actual").innerHTML = `<span class="bad">${e.message}</span>`; }
 }
 
-$("allmixes").onchange = loadMeasure; $("nteams").onchange = loadMeasure;
+$("allmixes").onchange = loadMeasure; $("nteams").onchange = loadMeasure; $("mdates").onchange = loadMeasure;
 // one-tap team counts (owner, 19 Oct 2026: "entering 15 teams vs entering 10 teams")
 document.querySelectorAll(".nq").forEach((b) => b.onclick = () => { $("nteams").value = b.dataset.n; loadMeasure(); });
 document.querySelectorAll(".sz").forEach((b) => b.onclick = () => { S.measureSize = b.dataset.b; loadMeasure(); });
