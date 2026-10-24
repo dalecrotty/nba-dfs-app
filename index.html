@@ -84,7 +84,9 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     <div class="slider"><span>DC</span><input type="range" id="w_dc" min="0" max="10" value="10"><span id="v_dc">100%</span></div>
     <div class="slider"><span>BM</span><input type="range" id="w_bm" min="0" max="10" value="0"><span id="v_bm">0%</span></div>
     <div class="slider"><span>RW</span><input type="range" id="w_rw" min="0" max="10" value="0"><span id="v_rw">0%</span></div>
-    <div class="row"><button id="even">Even thirds</button><button id="dconly">Drop Coverage only</button></div>
+    <div class="row"><button id="even">Even thirds</button><button id="dconly">Drop Coverage only</button><button id="propscal">Props, calibrated</button></div>
+    <div class="row small"><span>Bookmaker props:</span><select id="propsmode"><option value="off">off (sliders only)</option><option value="cal">calibrated: props where priced, the rest scaled to them</option><option value="raw">props where priced, the rest as the sliders</option></select></div>
+    <p class="small mute">Props = the bookmakers' lines for points, rebounds, assists and threes (median across books) in DraftStars points, with Drop Coverage's steals, blocks and turnovers. The books price the regulars, not most bench players; for those the sliders' mix is used, and "calibrated" scales it to the props (our sources ran about 2 points high on opening week). "Props, calibrated" = calibrated with even thirds, the way Measurement grades it.</p>
     <p class="small mute">Shares are the slider values divided by their total. The tested default is 100% Drop Coverage; the Monday report (research/results/sources) says whether a mix has earned a change. A player a source doesn't project gets the others' share.</p>
   </div>
 
@@ -100,6 +102,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
       <div class="tablewrap"><table id="ptable"><thead><tr>
         <th class="c" data-k="mark">Lock / Ex</th><th class="c" data-k="rank">#</th><th class="l" data-k="name">Player</th><th class="l" data-k="team">Team</th><th class="l" data-k="pos">Pos</th><th data-k="salary">Price</th>
         <th class="grp" data-k="dc">DC</th><th data-k="dcv">Val</th><th class="grp" data-k="bm">BM</th><th data-k="bmv">Val</th><th class="grp" data-k="rw">RW</th><th data-k="rwv">Val</th>
+        <th class="grp" data-k="pr">Props</th><th data-k="prv">Val</th>
         <th class="grp" data-k="mix">Mix</th><th data-k="mixv">Val</th>
       </tr></thead><tbody></tbody></table></div>
       <p class="small mute" style="margin:8px 0 0">Value = projection ÷ (price ÷ $1,000) ÷ 3, so 100% is a 300-point team at the $100k cap. Green: 90%+, 100%+, 110%+.</p>
@@ -306,7 +309,7 @@ async function loadSlate(quiet, stay) {
     const keptMarks = same ? Object.fromEntries(Object.entries(S.marks).map(([i, m]) => [S.pool[+i]?.ds_id, m]).filter(([d]) => d != null)) : {};
     const keptLineups = same ? (S.lineups || []).map((lu) => lu.map((z) => ({ ...z, ds: S.pool[z.i]?.ds_id }))) : [];
     S.slate = s; S.slateId = id;
-    S.pool = s.pool.map((p, i) => ({ ...p, i, posList: p.pos }));
+    S.pool = s.pool.map((p, i) => ({ ...p, i, posList: p.pos })); S.propsK = null;
     const c = s.contest, n = S.pool.filter((p) => p.dc != null).length;
     $("slateinfo").innerHTML = `<b>${c.name || id}</b> · ${c.is_captain ? "single game (captain)" : c.n_games + " games"} · US date ${c.slate_date} · $${c.entry_fee ?? "?"} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} per person<br>`
       + `Tips: ${s.games.map((g) => `${g.away}@${g.home} ${g.tip ? fmtT(g.tip) : "?"}`).join(", ")}<br>`
@@ -319,7 +322,8 @@ async function loadSlate(quiet, stay) {
       if (!c.ok) return `${label}: <span class="bad">check failed ${fmtAge(c.at)}</span>, numbers from ${changed}`;
       return `${label}: checked ${fmtAge(c.at)}, ` + (key === "drop_coverage" ? `last recalculated ${changed}` : `last changed ${changed}`);
     };
-    $("ages").innerHTML = `${line("DC", "drop_coverage")}<br>${line("BM", "basketball_monster")}<br>${line("RW", "rotowire")}`;
+    const nPr = S.pool.filter((p) => p.pr != null).length;
+    $("ages").innerHTML = `${line("DC", "drop_coverage")}<br>${line("BM", "basketball_monster")}<br>${line("RW", "rotowire")}<br>Props: ${nPr ? `${nPr} players priced by the books (live)` : "no lines yet for this slate"}`;
     $("ages2").innerHTML = $("ages").innerHTML;
     // Drop Coverage runs once a day for the day's games; before that run the
     // other sources are all there is, so point the sliders at them
@@ -357,15 +361,36 @@ function weights() {
   for (const k of ["dc", "bm", "rw"]) $("v_" + k).textContent = Math.round(100 * w[k] / t) + "%";
   return { dc: w.dc / t, bm: w.bm / t, rw: w.rw / t };
 }
-function mixOf(p, w) {
+function baseMix(p, w) {
   let num = 0, den = 0;
   for (const k of ["dc", "bm", "rw"]) if (p[k] != null && w[k] > 0) { num += w[k] * p[k]; den += w[k]; }
   return den > 0 ? num / den : null;
 }
+// bookmaker props (owner, 24 Oct 2026; PREREG_sources amendment 7): "raw" = props
+// where the books price him, else the sliders' mix; "cal" = the same with the
+// mix scaled by props / mix over the players both carry (1 under 10 of them),
+// as Measurement's "propscal" grades it with even thirds
+function propsK(w) {
+  const key = `${S.slateId}|${w.dc}|${w.bm}|${w.rw}`;
+  if (S.propsK && S.propsK.key === key) return S.propsK.k;
+  let a = 0, b = 0, n = 0;
+  for (const p of S.pool || []) { const m = baseMix(p, w); if (p.pr > 0 && m > 0) { a += p.pr; b += m; n++; } }
+  const k = n >= 10 && b > 0 ? a / b : 1;
+  S.propsK = { key, k };
+  return k;
+}
+function mixOf(p, w) {
+  const m = baseMix(p, w), mode = $("propsmode") ? $("propsmode").value : "off";
+  if (mode === "off") return m;
+  if (p.pr != null) return p.pr;
+  return m == null ? null : mode === "cal" ? m * propsK(w) : m;
+}
 function isOut(p) { return p.status && /out|inj|susp|ir\b/i.test(String(p.status)); }
 for (const k of ["dc", "bm", "rw"]) $("w_" + k).oninput = () => { renderPlayers(); renderRapid(); };
 $("even").onclick = () => { for (const k of ["dc", "bm", "rw"]) $("w_" + k).value = 10; renderPlayers(); renderRapid(); };
-$("dconly").onclick = () => { $("w_dc").value = 10; $("w_bm").value = 0; $("w_rw").value = 0; renderPlayers(); renderRapid(); };
+$("dconly").onclick = () => { $("w_dc").value = 10; $("w_bm").value = 0; $("w_rw").value = 0; $("propsmode").value = "off"; renderPlayers(); renderRapid(); };
+$("propscal").onclick = () => { for (const k of ["dc", "bm", "rw"]) $("w_" + k).value = 10; $("propsmode").value = "cal"; renderPlayers(); renderRapid(); };
+$("propsmode").onchange = () => { renderPlayers(); renderRapid(); };
 $("usestacks").onchange = () => $("stacks").classList.toggle("hide", !$("usestacks").checked);
 function stackScore(g) { return (g.total || 0) + 12 * (g.key_out || []).length; }
 function renderStacks() {
@@ -387,7 +412,7 @@ function renderPlayers() {
   const val = (x, sal) => (x == null || !sal ? null : x / (sal / 1000) / PAR);
   for (const p of S.pool) {
     p.mix = mixOf(p, w); p.posStr = (p.posList || []).join("/");
-    p.dcv = val(p.dc, p.salary); p.bmv = val(p.bm, p.salary); p.rwv = val(p.rw, p.salary); p.mixv = val(p.mix, p.salary);
+    p.dcv = val(p.dc, p.salary); p.bmv = val(p.bm, p.salary); p.rwv = val(p.rw, p.salary); p.prv = val(p.pr, p.salary); p.mixv = val(p.mix, p.salary);
     p.value = p.mixv; p.mark = S.marks[p.i] === "lock" ? 0 : S.marks[p.i] === "ban" ? 2 : 1;
   }
   const q = $("find").value.trim().toLowerCase();
@@ -406,6 +431,7 @@ function renderPlayers() {
     <td class="grp">${f(p.dc)}</td><td class="${tint(p.dcv)}">${pct(p.dcv)}</td>
     <td class="grp">${f(p.bm)}</td><td class="${tint(p.bmv)}">${pct(p.bmv)}</td>
     <td class="grp">${f(p.rw)}</td><td class="${tint(p.rwv)}">${pct(p.rwv)}</td>
+    <td class="grp">${f(p.pr)}</td><td class="${tint(p.prv)}">${pct(p.prv)}</td>
     <td class="grp"><b>${f(p.mix)}</b></td><td class="mixv ${tint(p.mixv)}">${pct(p.mixv)}</td></tr>`).join("");
   $("ptable").querySelectorAll("button.mk").forEach((b) => b.onclick = (ev) => {
     ev.stopPropagation();
@@ -451,7 +477,7 @@ $("build").onclick = async () => {
     const t0 = Date.now();
     const lus = window.Lineup.build(h, pool, rules, +$("nlu").value || 1, { minDiff: +$("mindiff").value || 1, locked: locked.map(([i, s]) => [i, s === "ANY" ? "ANY" : (pool.find((p) => p.i === i)?.pos[0] || s)]), banned, maxGames: stacks ? stacks.maxGames : null, games: stacks && stacks.games.length ? new Set(stacks.games) : null });
     if (!lus.length) throw new Error("no legal lineup: loosen the locks, or allow more games in the stack");
-    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), stacks };
+    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), stacks };
     renderLineups(pool);
     $("buildmsg").textContent = `${lus.length} lineup(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s`;
     $("result").classList.remove("hide"); $("result").scrollIntoView({ behavior: "smooth" });
@@ -754,7 +780,7 @@ async function loadBuilds() {
     const r = await api("/results");
     let html = "";
     const live = r.builds.filter((b) => !b.removed_at), gone = r.builds.filter((b) => b.removed_at);
-    const buildRow = (b) => `<tr><td class="l">${new Date(b.built_at).toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</td><td class="l">${b.contest_name || b.contest_id}${b.entered ? " ✓" : ""}</td><td class="l">${b.built_by || ""}</td><td>${b.n}</td><td class="l">${b.raw ? `${b.raw.dc}/${b.raw.bm}/${b.raw.rw}` : ""}</td><td>${b.cost != null ? "$" + b.cost.toFixed(0) : ""}</td><td>${b.won != null ? "$" + b.won.toFixed(0) : ""}</td><td class="${b.roi > 0 ? "ok" : b.roi != null ? "bad" : "mute"}">${b.roi != null ? (b.roi * 100).toFixed(0) + "%" : "not graded yet"}</td><td><button class="mk rmb" data-id="${b.build_id}" data-undo="${b.removed_at ? 1 : 0}">${b.removed_at ? "Restore" : "Remove"}</button></td></tr>`;
+    const buildRow = (b) => `<tr><td class="l">${new Date(b.built_at).toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</td><td class="l">${b.contest_name || b.contest_id}${b.entered ? " ✓" : ""}</td><td class="l">${b.built_by || ""}</td><td>${b.n}</td><td class="l">${b.raw ? `${b.raw.dc}/${b.raw.bm}/${b.raw.rw}${b.raw.props && b.raw.props !== "off" ? ` + props${b.raw.props === "cal" ? " (cal)" : ""}` : ""}` : ""}</td><td>${b.cost != null ? "$" + b.cost.toFixed(0) : ""}</td><td>${b.won != null ? "$" + b.won.toFixed(0) : ""}</td><td class="${b.roi > 0 ? "ok" : b.roi != null ? "bad" : "mute"}">${b.roi != null ? (b.roi * 100).toFixed(0) + "%" : "not graded yet"}</td><td><button class="mk rmb" data-id="${b.build_id}" data-undo="${b.removed_at ? 1 : 0}">${b.removed_at ? "Restore" : "Remove"}</button></td></tr>`;
     const head = `<div class="tablewrap"><table><thead><tr><th class="l">when</th><th class="l">contest</th><th class="l">by</th><th>teams</th><th class="l">mix</th><th>in</th><th>back</th><th>ROI <span class='mute'>(paper)</span></th><th></th></tr></thead><tbody>`;
     html += live.length ? head + live.map(buildRow).join("") + `</tbody></table></div>` : `<p class="mute">No saved builds yet.</p>`;
     if (gone.length) html += `<details style="margin-top:8px"><summary class="small mute">Removed builds (${gone.length})</summary>${head}${gone.map(buildRow).join("")}</tbody></table></div></details>`;
