@@ -657,10 +657,10 @@ async function loadMeasure() {
         const v = Object.values(sum).filter((z) => z.cost > 0).sort((p, q) => q.won / q.cost - p.won / p.cost);
         return v[0] ? { mix: v[0].mix, roi: v[0].won / v[0].cost - 1 } : null;
       };
-      const useBtn = (mix) => `<button class="mk usemix" data-mix="${mix}">use</button>`;
+      const useBtn = (mix) => (mix.includes("/") ? `<button class="mk usemix" data-mix="${mix}">use</button>` : "");
       html += `<h2 style="margin-top:12px">Best combo by slate size <span class="small mute">DC/BM/RW · ${period}</span></h2><div class="tablewrap"><table><thead><tr><th class="l">Slate</th><th>slates graded</th><th class="l">Use next <span class="mute">(all dates)</span></th><th class="l">Most accurate</th><th class="l">Best $15 ROI (${x} team${x > 1 ? "s" : ""})</th></tr></thead><tbody>`;
       for (const b of Object.keys(SIZES)) {
-        const a = acc0.filter((z) => z.bucket === b), aa = accAll.filter((z) => z.bucket === b);
+        const a = acc0.filter((z) => z.bucket === b), aa = accAll.filter((z) => z.bucket === b && z.mix.includes("/"));
         const n = a.length ? Math.max(...a.map((z) => z.slates)) : 0;
         const best = a.length ? [...a].sort((p, q) => p.mae - q.mae)[0] : null;
         const nAll = aa.length ? Math.max(...aa.map((z) => z.slates)) : 0;
@@ -688,7 +688,7 @@ async function loadMeasure() {
     const acc = r.accuracy || [];
     html += `<h2 style="margin-top:12px">Accuracy by slate size <span class="small mute">average miss per player, DraftStars points (lower is better) · ${period}</span></h2>`;
     for (const b of Object.keys(SIZES).filter((b) => size === "all" || b === size)) {
-      const a = acc.filter((z) => z.bucket === b), aa = (r.accuracy_all || acc).filter((z) => z.bucket === b);
+      const a = acc.filter((z) => z.bucket === b), aa = (r.accuracy_all || acc).filter((z) => z.bucket === b && z.mix.includes("/"));
       html += `<h3 style="margin-top:8px">${SIZES[b]}</h3>`;
       if (!a.length) { html += `<p class="mute small">No slate of this size graded${rg ? " in " + period : " yet"}.</p>`; continue; }
       const by = Object.fromEntries(a.map((z) => [z.mix, z]));
@@ -699,7 +699,7 @@ async function loadMeasure() {
       const line = (label, z) => z ? `<tr><td class="l">${label}</td><td class="l"><b>${z.mix}</b></td><td><b>${z.mae.toFixed(2)}</b></td><td>${z.bias >= 0 ? "+" : "−"}${Math.abs(z.bias).toFixed(2)}</td><td>${z.players}</td><td>${z.slates}</td></tr>` : "";
       html += `<div class="tablewrap"><table><thead><tr><th class="l"></th><th class="l">DC/BM/RW</th><th>avg miss</th><th>bias</th><th>players</th><th>slates</th></tr></thead><tbody>`
         + line("Drop Coverage only", by["100/0/0"]) + line("Basketball Monster only", by["0/100/0"]) + line("RotoWire only", by["0/0/100"])
-        + line("Even split", by["33/33/33"]) + line("Most accurate so far", best) + `</tbody></table></div>`
+        + line("Even split", by["33/33/33"]) + line("Bookmaker props (else even split)", by["props"]) + line("Most accurate so far", best) + `</tbody></table></div>`
         + `<p class="small">Fitted blend for the next ${SIZES[b].toLowerCase()} slate: <b>${next}</b> <span class="mute">${slatesAll >= 3 ? `(most accurate over all ${slatesAll} slates)` : `(even split until 3 slates; ${slatesAll} so far)`}</span></p>`;
     }
     // multi-game and single game are separate programmes (owner, 20 Oct 2026:
@@ -726,9 +726,9 @@ async function loadMeasure() {
       // only contests that allowed x teams per person count (owner, 20 Oct 2026)
       if (!rows.length) { html += `<p class="mute">${r.mixes.some((m) => !!m.single === single && feeOk(m) && (size === "all" || m.bucket === size)) ? `No graded contest allowed ${x} teams per person yet.` : "Nothing graded yet."}</p>`; continue; }
       // top 10 by ROI, plus the default, the even split and your sliders wherever they rank
-      const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === curMix || m.wins > 0 || m.top10 > 0;
+      const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === "props" || m.mix === "props50" || m.mix === curMix || m.wins > 0 || m.top10 > 0;
       const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
-      const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === "fitted" ? " <span class='mute small'>most accurate on earlier slates</span>" : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");
+      const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === "fitted" ? " <span class='mute small'>most accurate on earlier slates</span>" : "") + (m.mix === "props" ? " <span class='mute small'>bookmaker props where priced, else even split</span>" : "") + (m.mix === "props50" ? " <span class='mute small'>half props, half even split</span>" : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");
       html += `<div class="tablewrap"><table><thead><tr><th class="c">rank</th><th class="l">DC/BM/RW</th><th>slates</th><th>contests</th><th>in</th><th>back</th><th>profit</th><th>ROI</th><th title="contests where its best team would have finished 1st">1st</th><th title="contests of 100+ entries where its best team would have finished in the top 10">top 10</th><th class="l" title="best finish in a contest of 100+ entries">best</th></tr></thead><tbody>`
         + show.map((m) => `<tr class="${m.mix === curMix ? "lock" : m.wins ? "win" : m.top10 ? "top" : ""}"><td class="c mute">${rows.indexOf(m) + 1}</td><td class="l"><b>${m.mix}</b>${tag(m)}</td><td>${m.slates}</td><td>${m.contests}</td><td>$${m.cost.toFixed(0)}</td><td>$${m.won.toFixed(0)}</td><td class="${m.won - m.cost > 0 ? "ok" : "bad"}">${m.won - m.cost < 0 ? "−" : ""}$${Math.abs(m.won - m.cost).toFixed(0)}</td><td class="${m.roi > 0 ? "ok" : "bad"}"><b>${m.roi == null ? "" : (m.roi * 100).toFixed(0) + "%"}</b></td><td>${m.wins ? "🏆 " + m.wins : ""}</td><td>${m.top10 || ""}</td><td class="l small">${m.best || ""}</td></tr>`).join("") + `</tbody></table></div>`
         + `<p class="small mute">🏆 = contests where that combo's best team would have finished 1st; top 10 and best = contests of 100+ entries. Gold rows would have won something; pale rows made a top 10. They always show, even outside the top 10 by ROI.</p>`;
