@@ -125,6 +125,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
         <div id="stacklist"></div>
       </div>
       <div class="row" style="margin-top:8px"><button id="build" class="p">Build lineups</button><span id="buildmsg" class="mute"></span></div>
+      <p id="buildtime" class="small" style="margin:6px 0 0"></p>
     </div>
     <div id="result" class="card hide">
       <h2>Lineups</h2>
@@ -236,6 +237,23 @@ document.querySelectorAll(".tab").forEach((b) => b.onclick = () => showTab(b.dat
 
 // ── lobby ───────────────────────────────────────────────────────────────
 const money = (v) => (v == null ? "?" : "$" + (+v).toLocaleString(undefined, { maximumFractionDigits: 0 }));
+// Where to play (owner, 24 Oct 2026, research/PREREG_where.md): the $2 Minis and
+// $15 tournaments only; single game 1 team; multi-game 3 teams in a 4+ game slate
+// (a $15 field of 1,000+), skip 2-3 game slates and smaller $15 fields; small
+// stakes before 1 December (the method lost Oct-Nov 2025 and made money Dec-Feb)
+function whereToPlay(c) {
+  const name = String(c.name || ""), fee = +c.entry_fee;
+  const tourney = /\$[0-9][0-9,]*\+/.test(name) && !/double up|triple up|stick it|6-player|head to head|\bh2h\b|50\/50/i.test(name);
+  if (!tourney || (fee !== 2 && fee !== 15)) return null;
+  const d = String(c.slate_date || c.starts_at || "").slice(0, 10), early = d && d.slice(5) >= "07-01" && d.slice(5) < "12-01";
+  const note = early ? " · Oct–Nov: small stakes" : "";
+  if (c.is_captain) return { play: true, teams: 1, text: `PLAY · 1 team${note}`, why: "single game: one team beat ten (F18)" };
+  const games = +c.n_games || 0, field = +c.max_entries || 0;
+  if (games && games <= 3) return { play: false, teams: 0, text: "SKIP · 2–3 game slate", why: "2-3 game slates lost in both seasons (F23)" };
+  if (fee === 15 && field && field < 1000) return { play: false, teams: 0, text: "SKIP · field under 1,000", why: "smaller $15 fields lost or were mixed (F23; the history is $15 contests; $2 Minis cap under 1,000 by design)" };
+  return { play: true, teams: 3, text: `PLAY · 3 teams${note}`, why: "4+ games and a field of 1,000+: positive in both seasons; the first 3 teams did best (F23)" };
+}
+const ruleTag = (c) => { const r = whereToPlay(c); return r ? ` <span class="${r.play ? "ok" : "bad"} small" title="${r.why}"><b>${r.text}</b></span>` : ""; };
 async function loadLobby() {
   $("lobby").textContent = "Loading…";
   try {
@@ -245,7 +263,7 @@ async function loadLobby() {
     const show = rows.filter((c) => all || c.entry_fee === 2 || c.entry_fee === 15);
     if (!show.length) { $("lobby").textContent = rows.length ? "No $2 or $15 NBA contest in the lobby right now (tick 'every entry fee' to see the rest)." : "No NBA contests in the lobby right now."; return; }
     const payback = (c) => { if (!c.prize_pool || !c.entry_fee) return ""; const full = c.max_entries ? c.prize_pool / (c.entry_fee * c.max_entries) : null; const now = c.entries ? c.prize_pool / (c.entry_fee * c.entries) : null; return ` · pays back ${now != null ? Math.round(100 * Math.min(now, 9.99)) + "% now" : "—"}${full != null ? `, ${Math.round(100 * full)}% if full` : ""}`; };
-    $("lobby").innerHTML = show.map((c) => `<div class="lu lobbyrow" data-id="${c.contest_id}" style="cursor:pointer"><b>${c.name || c.contest_id}</b> · ${c.is_captain ? "single game" : (c.n_games ?? "?") + " games"} · $${c.entry_fee ?? "?"} · prize pool ${money(c.prize_pool)} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} each · tips ${c.starts_at ? fmtT(c.starts_at) : "?"}${payback(c)}</div>`).join("");
+    $("lobby").innerHTML = show.map((c) => `<div class="lu lobbyrow" data-id="${c.contest_id}" style="cursor:pointer"><b>${c.name || c.contest_id}</b>${ruleTag(c)} · ${c.is_captain ? "single game" : (c.n_games ?? "?") + " games"} · $${c.entry_fee ?? "?"} · prize pool ${money(c.prize_pool)} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} each · tips ${c.starts_at ? fmtT(c.starts_at) : "?"}${payback(c)}</div>`).join("");
     document.querySelectorAll(".lobbyrow").forEach((el) => el.onclick = () => { $("contest").value = el.dataset.id; loadSlate(); window.scrollTo({ top: $("slateinfo").offsetTop - 80, behavior: "smooth" }); });
   } catch (e) { $("lobby").innerHTML = `<span class="bad">${e.message}</span>`; }
 }
@@ -308,10 +326,10 @@ async function loadSlate(quiet, stay) {
     const same = !!S.slate && S.slateId === id;
     const keptMarks = same ? Object.fromEntries(Object.entries(S.marks).map(([i, m]) => [S.pool[+i]?.ds_id, m]).filter(([d]) => d != null)) : {};
     const keptLineups = same ? (S.lineups || []).map((lu) => lu.map((z) => ({ ...z, ds: S.pool[z.i]?.ds_id }))) : [];
-    S.slate = s; S.slateId = id;
+    S.slate = s; S.slateId = id; setTimeout(renderBuildTime, 0);
     S.pool = s.pool.map((p, i) => ({ ...p, i, posList: p.pos })); S.propsK = null;
     const c = s.contest, n = S.pool.filter((p) => p.dc != null).length;
-    $("slateinfo").innerHTML = `<b>${c.name || id}</b> · ${c.is_captain ? "single game (captain)" : c.n_games + " games"} · US date ${c.slate_date} · $${c.entry_fee ?? "?"} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} per person<br>`
+    $("slateinfo").innerHTML = `<b>${c.name || id}</b>${ruleTag(c)} · ${c.is_captain ? "single game (captain)" : c.n_games + " games"} · US date ${c.slate_date} · $${c.entry_fee ?? "?"} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} per person<br>`
       + `Tips: ${s.games.map((g) => `${g.away}@${g.home} ${g.tip ? fmtT(g.tip) : "?"}`).join(", ")}<br>`
       + `${S.pool.length} players, ${n} with a Drop Coverage number, ${S.pool.filter((p) => p.player_id == null).length} unmatched names`;
     // checked = when we last looked; changed = when the numbers last moved (owner, 20 Oct 2026)
@@ -401,6 +419,22 @@ function renderStacks() {
   $("stacklist").innerHTML = ranked.map((g) => `<label class="chk" style="display:flex"><input type="checkbox" class="stk" data-g="${g.id}" ${top.has(g.id) ? "checked" : ""}> <b>${g.away}@${g.home}</b>&nbsp;· total ${g.total != null ? g.total : "?"}${(g.key_out || []).length ? ` · <span class="warn">out: ${g.key_out.join(", ")}</span>` : ""}</label>`).join("");
 }
 $("nstack").onchange = renderStacks;
+
+// ── build late (owner, 24 Oct 2026) ─────────────────────────────────────
+// the bookmakers' closing lines land about 15 minutes before each game and the
+// starting fives about 30; build in the last 15 minutes before the first tip
+function renderBuildTime() {
+  const el = $("buildtime"); if (!el) return;
+  if (!S.slate || !S.slate.games || !S.slate.games.length) { el.textContent = ""; return; }
+  const first = Math.min(...S.slate.games.map((g) => g.tip ? new Date(g.tip).getTime() : Infinity));
+  if (!Number.isFinite(first)) { el.textContent = ""; return; }
+  const min = Math.round((first - Date.now()) / 60000);
+  const r = whereToPlay(S.slate.contest); const rule = r ? ` Rule for this contest: <b>${r.text}</b>.` : "";
+  if (min > 15) el.innerHTML = `<span class="warn">First tip in ${min >= 60 ? Math.floor(min / 60) + "h " : ""}${min % 60}m. Build in the last 15 minutes:</span> the bookmakers' closing lines and the starting fives land then. Tap Refresh projections, then Build.${rule}`;
+  else if (min > 0) el.innerHTML = `<span class="ok"><b>Now's the time.</b></span> First tip in ${min}m: tap Refresh projections, then Build.${rule}`;
+  else el.innerHTML = `First tip has gone; later games: use the Swaps tab.${rule}`;
+}
+setInterval(renderBuildTime, 30000);
 
 // ── players table ───────────────────────────────────────────────────────
 document.querySelectorAll("#ptable th").forEach((th) => th.onclick = () => { const k = th.dataset.k; if (k === "mark") return; S.sort = { k, d: S.sort.k === k ? -S.sort.d : (["name", "team", "pos", "rank"].includes(k) ? 1 : -1) }; renderPlayers(); });
@@ -698,6 +732,24 @@ async function loadMeasure() {
           + `<td class="l">${rb ? `${rb.mix} <span class="small ${rb.roi > 0 ? "ok" : "bad"}">${(rb.roi * 100).toFixed(0)}%</span> ${useBtn(rb.mix)}` : "<span class='mute'>—</span>"}</td></tr>`;
       }
       html += `</tbody></table></div><p class="small mute">"Use next" is the pre-registered pick and the one to trust: accuracy settles in a couple of weeks; ROI needs 40+ slates of a size before it means anything. "use" sets your sliders to that combo.</p>`;
+    }
+    // the where-to-play rule (research/PREREG_where.md, 24 Oct 2026) against playing
+    // every graded contest with 10 teams, for the default, the even split and the props
+    {
+      const R = r.rule || [];
+      const keyMixes = ["100/0/0", "33/33/33", "propscal", "props", "fitted"];
+      const cell = (won, cost) => cost ? `$${cost.toFixed(0)} → $${won.toFixed(0)} <b class="${won > cost ? "ok" : "bad"}">${((won / cost - 1) * 100).toFixed(0)}%</b>` : "<span class='mute'>—</span>";
+      html += `<h2 style="margin-top:12px">Where-to-play rule <span class="small mute">${period} · single game 1 team; multi-game 3 teams, 4+ games ($15: field 1,000+) · against every contest at 10 teams</span></h2>`;
+      for (const [single, label] of [[false, "Multi-game"], [true, "Single game"]]) {
+        html += `<div class="tablewrap"><table><thead><tr><th class="l">${label}</th><th class="l">fee</th><th>rule: contests</th><th class="l">rule: in → back</th><th>all: contests</th><th class="l">all at 10: in → back</th></tr></thead><tbody>`;
+        for (const fee of [15, 2]) for (const mx of keyMixes) {
+          const z = R.find((q) => q.mix === mx && !!q.single === single && +q.fee === fee);
+          if (!z) continue;
+          html += `<tr><td class="l">${mx}</td><td class="l">$${fee}</td><td>${z.contests}</td><td class="l">${cell(z.won, z.cost)}</td><td>${z.all_contests}</td><td class="l">${cell(z.all_won, z.all_cost)}</td></tr>`;
+        }
+        html += `</tbody></table></div>`;
+      }
+      html += `<p class="small mute">The rule was written down before this view existed (24 Oct 2026); it comes from the 2024-26 history (F23), not yet tested. The live season is its test: $15 decides, 40+ slates.</p>`;
     }
     // the graded slates, newest first: date, games, size, contests, players compared
     const sl = (r.slates || []).filter((z) => (size === "all" || z.bucket === size) && inRange(z.slate_date));
