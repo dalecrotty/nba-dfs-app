@@ -34,7 +34,7 @@ tbody tr:nth-child(even) td{background:var(--zebra)}tbody tr{cursor:pointer}
 button.mk{padding:2px 7px;font-size:13px;margin:0 2px;background:var(--card);border:1px solid var(--line);color:var(--mute);border-radius:6px}button.mk.on{background:var(--acc);color:#fff;border-color:var(--acc)}td.nowrap{white-space:nowrap}
 td.v1{background:var(--v1)!important}td.v2{background:var(--v2)!important}td.v3{background:var(--v3)!important;font-weight:600}
 td.mixv{font-weight:700}
-tr.lock td{background:var(--lock)!important}tr.win td{background:var(--win)!important}tr.top td{background:var(--top)!important}tr.ban td{background:var(--ban)!important;text-decoration:line-through;color:var(--mute)}
+tr.lock td{background:var(--lock)!important}tr.pnlrow{cursor:pointer}tr.pnlsel td{box-shadow:inset 0 -2px 0 var(--acc)}.pnl{padding:6px 0}.pnl table{margin-top:4px}tr.win td{background:var(--win)!important}tr.top td{background:var(--top)!important}tr.ban td{background:var(--ban)!important;text-decoration:line-through;color:var(--mute)}
 .mark{display:inline-block;width:22px;text-align:center;color:var(--mute)}
 .pill{display:inline-block;padding:1px 7px;border-radius:999px;border:1px solid var(--line);font-size:12px;margin-right:4px}
 .lu{border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0;font-size:13px}.lu b{font-size:13px}.lu.off{opacity:.45}
@@ -790,11 +790,11 @@ async function loadMeasure() {
       // older rows without per-k grades only count at their full size), summed over the slate sizes shown
       const sum = {};
       for (const m of r.mixes.filter((m) => !!m.single === single && feeOk(m) && (m.k == null || +m.k === x) && (size === "all" || m.bucket === size))) {
-        const z = sum[m.mix] || (sum[m.mix] = { mix: m.mix, sl: {}, contests: 0, cost: 0, won: 0, wins: 0, top10: 0, best: null });
+        const z = sum[m.mix] || (sum[m.mix] = { mix: m.mix, sl: {}, contests: 0, profited: 0, cost: 0, won: 0, wins: 0, top10: 0, best: null });
         const per = all ? +m.fee || 1 : 1;
         z.sl[m.bucket] = Math.max(z.sl[m.bucket] || 0, m.slates); z.contests += m.contests; z.cost += m.cost / per; z.won += m.won / per;
         // would-have-won and top 10 (owner, 23 Oct 2026); best finish in a field of 100+
-        z.wins += m.wins || 0; z.top10 += m.top10 || 0;
+        z.wins += m.wins || 0; z.top10 += m.top10 || 0; z.profited += m.profited || 0;
         if (m.best && (!z.best || parseInt(m.best) < parseInt(z.best))) z.best = m.best;
       }
       const rows = Object.values(sum).map((m) => ({ ...m, slates: Object.values(m.sl).reduce((a, b) => a + b, 0), roi: m.cost ? m.won / m.cost - 1 : null })).sort((a, b) => (b.roi ?? -9) - (a.roi ?? -9));
@@ -809,13 +809,32 @@ async function loadMeasure() {
       const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === "props" || m.mix === "props50" || m.mix === "propscal" || SPREAD_TAGS[m.mix] || m.mix === curMix || m.wins > 0 || m.top10 > 0;
       const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
       const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === "fitted" ? " <span class='mute small'>most accurate on earlier slates</span>" : "") + (m.mix === "props" ? " <span class='mute small'>bookmaker props where priced, else even split</span>" : "") + (m.mix === "props50" ? " <span class='mute small'>half props, half even split</span>" : "") + (m.mix === "propscal" ? " <span class='mute small'>props, unpriced players scaled to the props</span>" : "") + (SPREAD_TAGS[m.mix] ? ` <span class='mute small'>${SPREAD_TAGS[m.mix]}</span>` : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");
-      html += `<div class="tablewrap"><table><thead><tr><th class="c">rank</th><th class="l">DC/BM/RW</th><th>slates</th><th>contests</th><th>in</th><th>back</th><th>profit</th><th>ROI</th><th title="contests where its best team would have finished 1st">1st</th><th title="contests of 100+ entries where its best team would have finished in the top 10">top 10</th><th class="l" title="best finish in a contest of 100+ entries">best</th></tr></thead><tbody>`
-        + show.map((m) => `<tr class="${m.mix === curMix ? "lock" : m.wins ? "win" : m.top10 ? "top" : ""}"><td class="c mute">${rows.indexOf(m) + 1}</td><td class="l"><b>${m.mix}</b>${tag(m)}</td><td>${m.slates}</td><td>${m.contests}</td><td>$${m.cost.toFixed(0)}</td><td>$${m.won.toFixed(0)}</td><td class="${m.won - m.cost > 0 ? "ok" : "bad"}">${m.won - m.cost < 0 ? "−" : ""}$${Math.abs(m.won - m.cost).toFixed(0)}</td><td class="${m.roi > 0 ? "ok" : "bad"}"><b>${m.roi == null ? "" : (m.roi * 100).toFixed(0) + "%"}</b></td><td>${m.wins ? "🏆 " + m.wins : ""}</td><td>${m.top10 || ""}</td><td class="l small">${m.best || ""}</td></tr>`).join("") + `</tbody></table></div>`
-        + `<p class="small mute">🏆 = contests where that combo's best team would have finished 1st; top 10 and best = contests of 100+ entries. Gold rows would have won something; pale rows made a top 10. They always show, even outside the top 10 by ROI.</p>`;
+      html += `<div class="tablewrap"><table><thead><tr><th class="c">rank</th><th class="l">DC/BM/RW</th><th>slates</th><th>contests</th><th>in</th><th>back</th><th>profit</th><th>ROI</th><th title="contests where it got back more than it put in, out of all its contests">profitable</th><th title="contests where its best team would have finished 1st">1st</th><th title="contests of 100+ entries where its best team would have finished in the top 10">top 10</th><th class="l" title="best finish in a contest of 100+ entries">best</th></tr></thead><tbody>`
+        + show.map((m) => `<tr class="pnlrow ${m.mix === curMix ? "lock" : m.wins ? "win" : m.top10 ? "top" : ""}" data-mix="${m.mix}" data-single="${single ? 1 : 0}" data-fee="${fee}" title="Tap for this combo's profit night by night"><td class="c mute">${rows.indexOf(m) + 1}</td><td class="l"><b>${m.mix}</b>${tag(m)}</td><td>${m.slates}</td><td>${m.contests}</td><td>$${m.cost.toFixed(0)}</td><td>$${m.won.toFixed(0)}</td><td class="${m.won - m.cost > 0 ? "ok" : "bad"}">${m.won - m.cost < 0 ? "−" : ""}$${Math.abs(m.won - m.cost).toFixed(0)}</td><td class="${m.roi > 0 ? "ok" : "bad"}"><b>${m.roi == null ? "" : (m.roi * 100).toFixed(0) + "%"}</b></td><td>${m.contests ? Math.round(100 * m.profited / m.contests) + "%" : ""} <span class="mute small">${m.profited}/${m.contests}</span></td><td>${m.wins ? "🏆 " + m.wins : ""}</td><td>${m.top10 || ""}</td><td class="l small">${m.best || ""}</td></tr>`).join("") + `</tbody></table></div>`
+        + `<p class="small mute">Tap a combo for its profit night by night. Profitable = contests where it got back more than it put in. 🏆 = contests where that combo's best team would have finished 1st; top 10 and best = contests of 100+ entries. Gold rows would have won something; pale rows made a top 10. They always show, even outside the top 10 by ROI.</p>`;
       const nights = Math.max(...rows.map((m) => m.slates));
       html += `<p class="small mute">${nights} slate(s) graded. ${nights < 40 ? "Descriptive only until 40 slates." : "The adoption bar applies (PREREG_sources.md)."}</p>`;
     }
     $("results").innerHTML = html;
+    // a combo's running profit, night by night (owner, 27 Oct 2026: "a P&L graph when we
+    // click on a combination, to see how it's trending"); tap again to close
+    document.querySelectorAll("tr.pnlrow").forEach((tr) => tr.onclick = async () => {
+      // the chart opens under the table (the table scrolls sideways on a phone); one per
+      // table, tap the same combo again to close
+      const wrap = tr.closest(".tablewrap"), open = wrap.nextElementSibling;
+      const was = open && open.classList.contains("pnlbox") ? open : null;
+      if (was) was.remove();
+      wrap.querySelectorAll("tr.pnlsel").forEach((r) => r.classList.remove("pnlsel"));
+      if (was && was.dataset.mix === tr.dataset.mix) return;
+      tr.classList.add("pnlsel");
+      const box = document.createElement("div"); box.className = "pnlbox"; box.dataset.mix = tr.dataset.mix;
+      box.innerHTML = `<div class="pnl mute small">Loading…</div>`;
+      wrap.after(box);
+      const qs = new URLSearchParams({ mix: tr.dataset.mix, k: String(x), single: tr.dataset.single, fee: tr.dataset.fee, size });
+      if (rg) { qs.set("from", rg[0]); qs.set("to", rg[1]); }
+      try { box.innerHTML = pnlChart((await api("/pnl?" + qs)).nights, tr.dataset.mix, +tr.dataset.fee, x); }
+      catch (e) { box.innerHTML = `<span class="bad">${e.message}</span>`; }
+    });
     // "use": set the sliders to a combo (shares in 10% steps; the even split is a third each)
     document.querySelectorAll(".usemix").forEach((b) => b.onclick = () => {
       const [dc, bm, rw] = b.dataset.mix === "33/33/33" ? [5, 5, 5] : b.dataset.mix.split("/").map((v) => Math.round(+v / 10));
@@ -824,6 +843,43 @@ async function loadMeasure() {
       loadMeasure();
     });
   } catch (e) { $("results").innerHTML = `<span class="bad">${e.message}</span>`; }
+}
+
+// the P&L chart: running profit after each graded night, one line (the combo), a zero
+// line, a dot per night; tap a night for its numbers; the nights' table under it
+let pnlSeq = 0;
+function pnlChart(nights, mix, fee, x) {
+  if (!nights || !nights.length) return `<div class="pnl mute small">No graded night for this combo here.</div>`;
+  let run = 0;
+  const pts = nights.map((n) => ({ ...n, p: n.won - n.cost, run: (run += n.won - n.cost) }));
+  const W = 360, H = 170, L = 46, R = 8, T = 10, B = 24;
+  const lo = Math.min(0, ...pts.map((p) => p.run)), hi = Math.max(0, ...pts.map((p) => p.run)), span = hi - lo || 1;
+  const X = (i) => L + (pts.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (pts.length - 1));
+  const Y = (v) => T + (hi - v) * (H - T - B) / span;
+  const money = (v) => (v < 0 ? "−$" : "$") + Math.abs(v).toFixed(0);
+  const ticks = [hi, 0, lo].filter((v, i, a) => a.indexOf(v) === i);
+  const step = Math.max(1, Math.ceil(pts.length / 4));
+  const day = (d) => new Date(d + "T12:00:00Z").toLocaleDateString([], { day: "numeric", month: "short" });
+  const tip = (p) => `${day(p.date)}: ${p.contests} contest${p.contests > 1 ? "s" : ""}, $${p.cost.toFixed(0)} in, $${p.won.toFixed(0)} back (${money(p.p)}); running total ${money(p.run)}`;
+  const last = pts[pts.length - 1];
+  const prof = pts.reduce((a, p) => a + p.profited, 0), cons = pts.reduce((a, p) => a + p.contests, 0);
+  const svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;display:block" role="img" aria-label="Running profit for ${mix}">
+    ${ticks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="var(--mute)">${money(v)}</text>`).join("")}
+    <line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--mute)" stroke-width="1"/>
+    <polyline fill="none" stroke="var(--acc)" stroke-width="2" stroke-linejoin="round" points="${pts.map((p, i) => `${X(i)},${Y(p.run)}`).join(" ")}"/>
+    ${pts.map((p, i) => `<circle cx="${X(i)}" cy="${Y(p.run)}" r="4" fill="var(--acc)" stroke="var(--card)" stroke-width="2"/>`).join("")}
+    ${pts.map((p, i) => (i % step === 0 || i === pts.length - 1) ? `<text x="${X(i)}" y="${H - 8}" text-anchor="${pts.length > 1 && i === pts.length - 1 ? "end" : i === 0 && pts.length > 1 ? "start" : "middle"}" font-size="11" fill="var(--mute)">${day(p.date)}</text>` : "").join("")}
+    ${pts.map((p, i) => `<rect class="pnlhit" data-i="${i}" x="${X(i) - Math.max(8, (W - L - R) / pts.length / 2)}" y="0" width="${Math.max(16, (W - L - R) / pts.length)}" height="${H}" fill="transparent"><title>${tip(p)}</title></rect>`).join("")}
+  </svg>`;
+  const table = `<table class="small"><thead><tr><th class="l">night</th><th>contests</th><th>in</th><th>back</th><th>night</th><th>running</th></tr></thead><tbody>`
+    + pts.map((p) => `<tr><td class="l">${day(p.date)}</td><td>${p.contests}</td><td>$${p.cost.toFixed(0)}</td><td>$${p.won.toFixed(0)}</td><td class="${p.p > 0 ? "ok" : "bad"}">${money(p.p)}</td><td class="${p.run > 0 ? "ok" : "bad"}">${money(p.run)}</td></tr>`).join("") + `</tbody></table>`;
+  const id = "pnl" + (++pnlSeq);
+  const html = `<div class="pnl" id="${id}"><b>${mix}</b> · $${fee} contests · ${x} team${x > 1 ? "s" : ""} each · running profit <b class="${last.run > 0 ? "ok" : "bad"}">${money(last.run)}</b> after ${pts.length} night${pts.length > 1 ? "s" : ""} · profitable in ${prof} of ${cons} contests
+    ${svg}<div class="pnltip small mute">Tap a night for its numbers.</div><details><summary class="small">Nights</summary>${table}</details></div>`;
+  setTimeout(() => { const el = document.getElementById(id); if (el) el.querySelectorAll(".pnlhit").forEach((r) => r.onclick = (e) => {
+    e.stopPropagation(); el.querySelector(".pnltip").textContent = tip(pts[+r.dataset.i]);
+  }); }, 0);
+  return html;
 }
 
 // saved builds (Results tab); Remove hides one that won't be used (it leaves
