@@ -238,7 +238,7 @@ document.querySelectorAll(".tab").forEach((b) => b.onclick = () => showTab(b.dat
 // ── lobby ───────────────────────────────────────────────────────────────
 const money = (v) => (v == null ? "?" : "$" + (+v).toLocaleString(undefined, { maximumFractionDigits: 0 }));
 // Where to play (owner, 24 Oct 2026, research/PREREG_where.md): the $2 Minis and
-// $15 tournaments only; single game 1 team; multi-game 3 teams in a 4+ game slate
+// $15 tournaments only; single game 5 teams (owner, 28 Oct 2026); multi-game 3 teams in a 4+ game slate
 // (a $15 field of 1,000+), skip 2-3 game slates and smaller $15 fields; small
 // stakes before 1 December (the method lost Oct-Nov 2025 and made money Dec-Feb)
 function whereToPlay(c) {
@@ -247,7 +247,9 @@ function whereToPlay(c) {
   if (!tourney || (fee !== 2 && fee !== 15)) return null;
   const d = String(c.slate_date || c.starts_at || "").slice(0, 10), early = d && d.slice(5) >= "07-01" && d.slice(5) < "12-01";
   const note = early ? " · Oct–Nov: small stakes" : "";
-  if (c.is_captain) return { play: true, teams: 1, text: `PLAY · 1 team${note}`, why: "single game: one team beat ten (F18)" };
+  // single game 5 teams (owner, 28 Oct 2026: "I want 5-build for single games"; history: 1 team +32%,
+  // 5 teams +6%, both seasons positive, F18/F27)
+  if (c.is_captain) return { play: true, teams: 5, text: `PLAY · 5 teams${note}`, why: "single game: 5 teams (owner, 28 Oct 2026); history: positive in both seasons" };
   const games = +c.n_games || 0, field = +c.max_entries || 0;
   if (games && games <= 3) return { play: false, teams: 0, text: "SKIP · 2–3 game slate", why: "2-3 game slates lost in both seasons (F23)" };
   if (fee === 15 && field && field < 1000) return { play: false, teams: 0, text: "SKIP · field under 1,000", why: "smaller $15 fields lost or were mixed (F23; the history is $15 contests; $2 Minis cap under 1,000 by design)" };
@@ -351,9 +353,12 @@ async function loadSlate(quiet, stay) {
       $("ages").innerHTML += ` <span class="warn">Drop Coverage has no numbers for this slate yet (its run for the day hasn't happened), so the sliders are on ${have.bm && have.rw ? "BM and RW" : have.bm ? "BM" : "RW"} for now. Tap Refresh projections later and move DC back up when it shows a time.</span>`;
     }
     if (!same) {              // a new contest starts from its own defaults
-      $("nlu").value = c.is_captain ? 1 : Math.min(15, c.entries_per_person || 15);
+      // the where-to-play rule's team count where it applies (single game 5, owner 28 Oct 2026;
+      // multi-game 3), else the contest's cap; teams differ by 3, as Measurement grades them
+      const wr = whereToPlay(c);
+      $("nlu").value = Math.min(wr && wr.play ? wr.teams : 15, +c.entries_per_person || 15);
       $("maxteam").value = s.rules.maxPerTeam || 5;
-      $("mindiff").value = c.is_captain ? 1 : 3;
+      $("mindiff").value = 3;
       $("nstack").max = Math.max(1, s.games.length); $("nstack").value = s.games.length;      // default: every game (no limit)
       renderStacks();
       $("result").classList.add("hide");
@@ -739,7 +744,7 @@ async function loadMeasure() {
       const R = r.rule || [];
       const keyMixes = ["100/0/0", "33/33/33", "propscal", "props", "fitted"];
       const cell = (won, cost) => cost ? `$${cost.toFixed(0)} → $${won.toFixed(0)} <b class="${won > cost ? "ok" : "bad"}">${((won / cost - 1) * 100).toFixed(0)}%</b>` : "<span class='mute'>—</span>";
-      html += `<h2 style="margin-top:12px">Where-to-play rule <span class="small mute">${period} · single game 1 team; multi-game 3 teams, 4+ games ($15: field 1,000+) · against every contest at 10 teams</span></h2>`;
+      html += `<h2 style="margin-top:12px">Where-to-play rule <span class="small mute">${period} · single game 5 teams; multi-game 3 teams, 4+ games ($15: field 1,000+) · against every contest at 10 teams</span></h2>`;
       for (const [single, label] of [[false, "Multi-game"], [true, "Single game"]]) {
         html += `<div class="tablewrap"><table><thead><tr><th class="l">${label}</th><th class="l">fee</th><th>rule: contests</th><th class="l">rule: in → back</th><th>all: contests</th><th class="l">all at 10: in → back</th></tr></thead><tbody>`;
         for (const fee of [15, 2]) for (const mx of keyMixes) {
