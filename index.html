@@ -805,7 +805,9 @@ async function loadMeasure() {
       if (!rows.length) { html += `<p class="mute">${r.mixes.some((m) => !!m.single === single && feeOk(m) && (size === "all" || m.bucket === size)) ? `No graded contest allowed ${x} teams per person yet.` : "Nothing graded yet."}</p>`; continue; }
       // top 10 by ROI, plus the default, the even split and your sliders wherever they rank
       // PREREG_sources amendment 8: upside from the three sources' disagreement
-      const SPREAD_TAGS = { high3: "highest of the three", upside3: "even split + half the sources' gap", median3: "middle of the three", low3: "lowest of the three" };
+      const SPREAD_TAGS = { high3: "highest of the three", upside3: "even split + half the sources' gap", median3: "middle of the three", low3: "lowest of the three",
+        // amendment 9: single game, the captain from the 6 highest projected
+        propscal_c6: "props, calibrated; captain from the top 6", even_c6: "even split; captain from the top 6" };
       const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === "props" || m.mix === "props50" || m.mix === "propscal" || SPREAD_TAGS[m.mix] || m.mix === curMix || m.wins > 0 || m.top10 > 0;
       const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
       const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === "fitted" ? " <span class='mute small'>most accurate on earlier slates</span>" : "") + (m.mix === "props" ? " <span class='mute small'>bookmaker props where priced, else even split</span>" : "") + (m.mix === "props50" ? " <span class='mute small'>half props, half even split</span>" : "") + (m.mix === "propscal" ? " <span class='mute small'>props, unpriced players scaled to the props</span>" : "") + (SPREAD_TAGS[m.mix] ? ` <span class='mute small'>${SPREAD_TAGS[m.mix]}</span>` : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");
