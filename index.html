@@ -21,7 +21,8 @@ input[type=text],input[type=email],input[type=number],select{font:inherit;paddin
 .tabs{display:flex;gap:6px;margin:0 0 12px;position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0}
 .tab{flex:1 1 0;padding:10px 6px;border-radius:999px;font-weight:600;font-size:14px}
 .tab.on{background:var(--acc);color:#fff;border-color:var(--acc)}
-.slider{display:grid;grid-template-columns:38px 1fr 44px;gap:8px;align-items:center;margin:6px 0}
+.slider{display:grid;grid-template-columns:38px 1fr 64px;gap:8px;align-items:center;margin:6px 0}
+.slider .pct{width:46px;padding:4px;text-align:right}
 input[type=range]{width:100%;accent-color:var(--acc)}
 .tablewrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:10px}
 table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
@@ -81,13 +82,14 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
 
   <div id="mixcard" class="card hide">
     <h2>Mix of projections</h2>
-    <div class="slider"><span>DC</span><input type="range" id="w_dc" min="0" max="10" value="10"><span id="v_dc">100%</span></div>
-    <div class="slider"><span>BM</span><input type="range" id="w_bm" min="0" max="10" value="0"><span id="v_bm">0%</span></div>
-    <div class="slider"><span>RW</span><input type="range" id="w_rw" min="0" max="10" value="0"><span id="v_rw">0%</span></div>
+    <div class="slider"><span>DC</span><input type="range" id="w_dc" min="0" max="100" step="1" value="100"><span><input type="number" id="n_dc" class="pct" min="0" max="100" inputmode="numeric" value="100">%</span></div>
+    <div class="slider"><span>BM</span><input type="range" id="w_bm" min="0" max="100" step="1" value="0"><span><input type="number" id="n_bm" class="pct" min="0" max="100" inputmode="numeric" value="0">%</span></div>
+    <div class="slider"><span>RW</span><input type="range" id="w_rw" min="0" max="100" step="1" value="0"><span><input type="number" id="n_rw" class="pct" min="0" max="100" inputmode="numeric" value="0">%</span></div>
+    <div id="mixline" class="small mute"></div>
     <div class="row"><button id="even">Even thirds</button><button id="dconly">Drop Coverage only</button><button id="propscal">Props, calibrated</button></div>
     <div class="row small"><span>Bookmaker props:</span><select id="propsmode"><option value="off">off (sliders only)</option><option value="cal">calibrated: props where priced, the rest scaled to them</option><option value="raw">props where priced, the rest as the sliders</option></select></div>
     <p class="small mute">Props = the bookmakers' lines for points, rebounds, assists and threes (median across books) in DraftStars points, with Drop Coverage's steals, blocks and turnovers. The books price the regulars, not most bench players; for those the sliders' mix is used, and "calibrated" scales it to the props (our sources ran about 2 points high on opening week). "Props, calibrated" = calibrated with even thirds, the way Measurement grades it.</p>
-    <p class="small mute">Shares are the slider values divided by their total. The tested default is 100% Drop Coverage; the Monday report (research/results/sources) says whether a mix has earned a change. A player a source doesn't project gets the others' share.</p>
+    <p class="small mute">Type the % for each source or drag the sliders (30 / 10 / 60 = 30% DC, 10% BM, 60% RW). If they don't add to 100, each is scaled by the total. The tested default is 100% Drop Coverage; the Monday report (research/results/sources) says whether a mix has earned a change. A player a source doesn't project gets the others' share.</p>
   </div>
 
   <div class="pane hide" data-t="value">
@@ -349,7 +351,7 @@ async function loadSlate(quiet, stay) {
     // other sources are all there is, so point the sliders at them
     const have = { bm: S.pool.some((p) => p.bm != null), rw: S.pool.some((p) => p.rw != null) };
     if (!n && (have.bm || have.rw) && +$("w_bm").value === 0 && +$("w_rw").value === 0) {
-      $("w_dc").value = 0; $("w_bm").value = have.bm ? 5 : 0; $("w_rw").value = have.rw ? 5 : 0;
+      setMix(0, have.bm ? 50 : 0, have.rw ? 50 : 0);
       $("ages").innerHTML += ` <span class="warn">Drop Coverage has no numbers for this slate yet (its run for the day hasn't happened), so the sliders are on ${have.bm && have.rw ? "BM and RW" : have.bm ? "BM" : "RW"} for now. Tap Refresh projections later and move DC back up when it shows a time.</span>`;
     }
     if (!same) {              // a new contest starts from its own defaults
@@ -381,7 +383,8 @@ async function loadSlate(quiet, stay) {
 function weights() {
   const w = { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value };
   const t = w.dc + w.bm + w.rw || 1;
-  for (const k of ["dc", "bm", "rw"]) $("v_" + k).textContent = Math.round(100 * w[k] / t) + "%";
+  const sh = ["dc", "bm", "rw"].map((k) => Math.round(100 * w[k] / t));
+  $("mixline").textContent = w.dc + w.bm + w.rw === 100 ? "" : `Adds to ${w.dc + w.bm + w.rw}%, so the mix used is DC ${sh[0]}% · BM ${sh[1]}% · RW ${sh[2]}%`;
   return { dc: w.dc / t, bm: w.bm / t, rw: w.rw / t };
 }
 function baseMix(p, w) {
@@ -409,10 +412,23 @@ function mixOf(p, w) {
   return m == null ? null : mode === "cal" ? m * propsK(w) : m;
 }
 function isOut(p) { return p.status && /out|inj|susp|ir\b/i.test(String(p.status)); }
-for (const k of ["dc", "bm", "rw"]) $("w_" + k).oninput = () => { renderPlayers(); renderRapid(); };
-$("even").onclick = () => { for (const k of ["dc", "bm", "rw"]) $("w_" + k).value = 10; renderPlayers(); renderRapid(); };
-$("dconly").onclick = () => { $("w_dc").value = 10; $("w_bm").value = 0; $("w_rw").value = 0; $("propsmode").value = "off"; renderPlayers(); renderRapid(); };
-$("propscal").onclick = () => { for (const k of ["dc", "bm", "rw"]) $("w_" + k).value = 10; $("propsmode").value = "cal"; renderPlayers(); renderRapid(); };
+// the sliders and the typed % boxes move together (owner, 30 Oct 2026: "put the % number directly in")
+function setMix(dc, bm, rw) {
+  for (const [k, v] of [["dc", dc], ["bm", bm], ["rw", rw]]) { $("w_" + k).value = v; $("n_" + k).value = v; }
+}
+function remix() { try { renderPlayers(); renderRapid(); } catch (_) { weights(); } }
+for (const k of ["dc", "bm", "rw"]) {
+  $("w_" + k).oninput = () => { $("n_" + k).value = $("w_" + k).value; remix(); };
+  $("n_" + k).oninput = () => {
+    if ($("n_" + k).value === "") return;
+    const v = Math.max(0, Math.min(100, Math.round(+$("n_" + k).value || 0)));
+    $("w_" + k).value = v; remix();
+  };
+  $("n_" + k).onchange = () => { $("n_" + k).value = $("w_" + k).value; };
+}
+$("even").onclick = () => { setMix(33, 33, 33); remix(); };
+$("dconly").onclick = () => { setMix(100, 0, 0); $("propsmode").value = "off"; remix(); };
+$("propscal").onclick = () => { setMix(33, 33, 33); $("propsmode").value = "cal"; remix(); };
 $("propsmode").onchange = () => { renderPlayers(); renderRapid(); };
 $("usestacks").onchange = () => $("stacks").classList.toggle("hide", !$("usestacks").checked);
 function stackScore(g) { return (g.total || 0) + 12 * (g.key_out || []).length; }
@@ -846,8 +862,7 @@ async function loadMeasure() {
     });
     // "use": set the sliders to a combo (shares in 10% steps; the even split is a third each)
     document.querySelectorAll(".usemix").forEach((b) => b.onclick = () => {
-      const [dc, bm, rw] = b.dataset.mix === "33/33/33" ? [5, 5, 5] : b.dataset.mix.split("/").map((v) => Math.round(+v / 10));
-      $("w_dc").value = dc; $("w_bm").value = bm; $("w_rw").value = rw;
+      setMix(...b.dataset.mix.split("/").map((v) => +v));
       try { renderPlayers(); renderRapid(); } catch (_) { /* no contest loaded yet */ }
       loadMeasure();
     });
@@ -899,7 +914,7 @@ async function loadBuilds() {
     const r = await api("/results");
     let html = "";
     const live = r.builds.filter((b) => !b.removed_at), gone = r.builds.filter((b) => b.removed_at);
-    const buildRow = (b) => `<tr><td class="l">${new Date(b.built_at).toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</td><td class="l">${b.contest_name || b.contest_id}${b.entered ? " ✓" : ""}</td><td class="l">${b.built_by || ""}</td><td>${b.n}</td><td class="l">${b.raw ? `${b.raw.dc}/${b.raw.bm}/${b.raw.rw}${b.raw.props && b.raw.props !== "off" ? ` + props${b.raw.props === "cal" ? " (cal)" : ""}` : ""}` : ""}</td><td>${b.cost != null ? "$" + b.cost.toFixed(0) : ""}</td><td>${b.won != null ? "$" + b.won.toFixed(0) : ""}</td><td class="${b.roi > 0 ? "ok" : b.roi != null ? "bad" : "mute"}">${b.roi != null ? (b.roi * 100).toFixed(0) + "%" : "not graded yet"}</td><td><button class="mk rmb" data-id="${b.build_id}" data-undo="${b.removed_at ? 1 : 0}">${b.removed_at ? "Restore" : "Remove"}</button></td></tr>`;
+    const buildRow = (b) => `<tr><td class="l">${new Date(b.built_at).toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</td><td class="l">${b.contest_name || b.contest_id}${b.entered ? " ✓" : ""}</td><td class="l">${b.built_by || ""}</td><td>${b.n}</td><td class="l">${b.raw ? `${[b.raw.dc, b.raw.bm, b.raw.rw].map((v) => Math.round(100 * v / (b.raw.dc + b.raw.bm + b.raw.rw || 1))).join("/")}${b.raw.props && b.raw.props !== "off" ? ` + props${b.raw.props === "cal" ? " (cal)" : ""}` : ""}` : ""}</td><td>${b.cost != null ? "$" + b.cost.toFixed(0) : ""}</td><td>${b.won != null ? "$" + b.won.toFixed(0) : ""}</td><td class="${b.roi > 0 ? "ok" : b.roi != null ? "bad" : "mute"}">${b.roi != null ? (b.roi * 100).toFixed(0) + "%" : "not graded yet"}</td><td><button class="mk rmb" data-id="${b.build_id}" data-undo="${b.removed_at ? 1 : 0}">${b.removed_at ? "Restore" : "Remove"}</button></td></tr>`;
     const head = `<div class="tablewrap"><table><thead><tr><th class="l">when</th><th class="l">contest</th><th class="l">by</th><th>teams</th><th class="l">mix</th><th>in</th><th>back</th><th>ROI <span class='mute'>(paper)</span></th><th></th></tr></thead><tbody>`;
     html += live.length ? head + live.map(buildRow).join("") + `</tbody></table></div>` : `<p class="mute">No saved builds yet.</p>`;
     if (gone.length) html += `<details style="margin-top:8px"><summary class="small mute">Removed builds (${gone.length})</summary>${head}${gone.map(buildRow).join("")}</tbody></table></div></details>`;
