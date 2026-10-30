@@ -345,7 +345,11 @@ async function loadSlate(quiet, stay) {
       return `${label}: checked ${fmtAge(c.at)}, ` + (key === "drop_coverage" ? `last recalculated ${changed}` : `last changed ${changed}`);
     };
     const nPr = S.pool.filter((p) => p.pr != null).length;
-    $("ages").innerHTML = `${line("DC", "drop_coverage")}<br>${line("BM", "basketball_monster")}<br>${line("RW", "rotowire")}<br>Props: ${nPr ? `${nPr} players priced by the books (live)` : "no lines yet for this slate"}`;
+    const nSt = S.pool.filter(prStale).length;
+    const prAt = s.props_at ? new Date(s.props_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
+    $("ages").innerHTML = `${line("DC", "drop_coverage")}<br>${line("BM", "basketball_monster")}<br>${line("RW", "rotowire")}<br>Props: ${nPr ? `${nPr} players priced by the books, lines from ${prAt} (${fmtAge(s.props_at)})` : "no lines yet for this slate"}`
+      + (nSt ? ` · <span class="warn">⚠ ${nSt} out of date: the other sources have moved since</span>` : "")
+      + ` <button class="prref">Refresh props</button> <span class="prmsg small"></span>`;
     $("ages2").innerHTML = $("ages").innerHTML;
     // Drop Coverage runs once a day for the day's games; before that run the
     // other sources are all there is, so point the sliders at them
@@ -411,6 +415,29 @@ function mixOf(p, w) {
   if (p.pr != null) return p.pr;
   return m == null ? null : mode === "cal" ? m * propsK(w) : m;
 }
+// props out of date (owner, 30 Oct 2026): two or more of DC, BM and RW have moved
+// him 2.5+ points the same way since his bookmaker lines were pulled
+function prStale(p) {
+  const m = p.prs; if (!(p.pr > 0) || !m) return null;
+  const v = [m.dc, m.bm, m.rw].filter((x) => x != null);
+  const up = v.filter((x) => x >= 2.5).length, dn = v.filter((x) => x <= -2.5).length;
+  return up >= 2 || dn >= 2 ? (up >= 2 ? "up" : "down") : null;
+}
+function prStaleNote(p) {
+  const m = p.prs, sg = (x) => (x == null ? "–" : (x > 0 ? "+" : "") + x);
+  return `out of date: since the lines (${new Date(m.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}) DC ${sg(m.dc)}, BM ${sg(m.bm)}, RW ${sg(m.rw)}. Tap Refresh props.`;
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest && ev.target.closest(".prref"); if (!b) return;
+  const say = (t) => document.querySelectorAll(".prmsg").forEach((e) => e.innerHTML = t);
+  document.querySelectorAll(".prref").forEach((x) => x.disabled = true);
+  try {
+    const r = await api("/props-refresh", { method: "POST", body: JSON.stringify({ date: S.slate && S.slate.contest ? S.slate.contest.slate_date : null }) });
+    say(r.ok ? "Pulling the bookmaker lines now: tap Refresh projections in about 3 minutes."
+             : `<span class="warn">Already asked at ${new Date(r.last).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}; one pull per 10 minutes.</span>`);
+  } catch (e) { say(`<span class="bad">${e.message}</span>`); }
+  setTimeout(() => document.querySelectorAll(".prref").forEach((x) => x.disabled = false), 15000);
+});
 function isOut(p) { return p.status && /out|inj|susp|ir\b/i.test(String(p.status)); }
 // the sliders and the typed % boxes move together (owner, 30 Oct 2026: "put the % number directly in")
 function setMix(dc, bm, rw) {
@@ -486,7 +513,7 @@ function renderPlayers() {
     <td class="grp">${f(p.dc)}</td><td class="${tint(p.dcv)}">${pct(p.dcv)}</td>
     <td class="grp">${f(p.bm)}</td><td class="${tint(p.bmv)}">${pct(p.bmv)}</td>
     <td class="grp">${f(p.rw)}</td><td class="${tint(p.rwv)}">${pct(p.rwv)}</td>
-    <td class="grp">${f(p.pr)}</td><td class="${tint(p.prv)}">${pct(p.prv)}</td>
+    <td class="grp">${f(p.pr)}${prStale(p) ? ` <span class="warn" title="${prStaleNote(p)}">⚠</span>` : ""}</td><td class="${tint(p.prv)}">${pct(p.prv)}</td>
     <td class="grp"><b>${f(p.mix)}</b></td><td class="mixv ${tint(p.mixv)}">${pct(p.mixv)}</td></tr>`).join("");
   $("ptable").querySelectorAll("button.mk").forEach((b) => b.onclick = (ev) => {
     ev.stopPropagation();
