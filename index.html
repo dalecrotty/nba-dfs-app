@@ -349,6 +349,7 @@ async function loadSlate(quiet, stay) {
     const prAt = s.props_at ? new Date(s.props_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
     $("ages").innerHTML = `${line("DC", "drop_coverage")}<br>${line("BM", "basketball_monster")}<br>${line("RW", "rotowire")}<br>Props: ${nPr ? `${nPr} players priced by the books, lines from ${prAt} (${fmtAge(s.props_at)})` : "no lines yet for this slate"}`
       + (nSt ? ` · <span class="warn">⚠ ${nSt} out of date: the other sources have moved since</span>` : "")
+      + (s.odds_credits ? ` · <span class="${s.odds_credits.credits < 300 ? "bad" : "mute"}">odds credits: ${s.odds_credits.credits} left${s.odds_credits.credits < 300 ? " (under a day's pulls: add a key or a paid plan)" : ""}</span>` : "")
       + ` <button class="prref">Refresh props</button> <span class="prmsg small"></span>`;
     $("ages2").innerHTML = $("ages").innerHTML;
     // Drop Coverage runs once a day for the day's games; before that run the
@@ -434,7 +435,8 @@ document.addEventListener("click", async (ev) => {
   try {
     const r = await api("/props-refresh", { method: "POST", body: JSON.stringify({ date: S.slate && S.slate.contest ? S.slate.contest.slate_date : null }) });
     say(r.ok ? "Pulling the bookmaker lines now: tap Refresh projections in about 3 minutes."
-             : `<span class="warn">Already asked at ${new Date(r.last).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}; one pull per 10 minutes.</span>`);
+             : r.last ? `<span class="warn">Already asked at ${new Date(r.last).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}; lines land about 3 minutes after the ask.</span>`
+             : `<span class="bad">Not pulled: ${r.error}</span>`);
   } catch (e) { say(`<span class="bad">${e.message}</span>`); }
   setTimeout(() => document.querySelectorAll(".prref").forEach((x) => x.disabled = false), 15000);
 });
