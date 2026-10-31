@@ -389,7 +389,7 @@ function weights() {
   const w = { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value };
   const t = w.dc + w.bm + w.rw || 1;
   const sh = ["dc", "bm", "rw"].map((k) => Math.round(100 * w[k] / t));
-  $("mixline").textContent = w.dc + w.bm + w.rw === 100 ? "" : `Adds to ${w.dc + w.bm + w.rw}%, so the mix used is DC ${sh[0]}% · BM ${sh[1]}% · RW ${sh[2]}%`;
+  $("mixline").textContent = Math.abs(w.dc + w.bm + w.rw - 100) <= 1 ? "" : `Adds to ${w.dc + w.bm + w.rw}%, so the mix used is DC ${sh[0]}% · BM ${sh[1]}% · RW ${sh[2]}%`;
   return { dc: w.dc / t, bm: w.bm / t, rw: w.rw / t };
 }
 function baseMix(p, w) {
@@ -441,17 +441,35 @@ document.addEventListener("click", async (ev) => {
   setTimeout(() => document.querySelectorAll(".prref").forEach((x) => x.disabled = false), 15000);
 });
 function isOut(p) { return p.status && /out|inj|susp|ir\b/i.test(String(p.status)); }
-// the sliders and the typed % boxes move together (owner, 30 Oct 2026: "put the % number directly in")
+// the sliders and the typed % boxes move together (owner, 30 Oct 2026: "put the % number directly in"),
+// and the three always add to 100 (owner, 31 Oct 2026): the one you move takes its share, the one you
+// set just before it keeps its own (as far as it fits), the third takes the rest; straight after a
+// preset button, the other two share the rest in their current proportion
+let mixOrder = [];
 function setMix(dc, bm, rw) {
   for (const [k, v] of [["dc", dc], ["bm", bm], ["rw", rw]]) { $("w_" + k).value = v; $("n_" + k).value = v; }
+  mixOrder = [];
+}
+function balance(k, v) {
+  if (mixOrder[0] !== k) mixOrder = [k, ...mixOrder.filter((x) => x !== k)];
+  const others = ["dc", "bm", "rw"].filter((x) => x !== k), rest = 100 - v, val = (x) => +$("w_" + x).value;
+  let set;
+  if (mixOrder[1]) {
+    const keep = mixOrder[1], third = others.find((x) => x !== keep), kv = Math.min(val(keep), rest);
+    set = { [keep]: kv, [third]: rest - kv };
+  } else {
+    const [a, b] = others, t = val(a) + val(b), av = t > 0 ? Math.round(rest * val(a) / t) : Math.round(rest / 2);
+    set = { [a]: av, [b]: rest - av };
+  }
+  $("w_" + k).value = v;
+  for (const x of others) { $("w_" + x).value = set[x]; $("n_" + x).value = set[x]; }
 }
 function remix() { try { renderPlayers(); renderRapid(); } catch (_) { weights(); } }
 for (const k of ["dc", "bm", "rw"]) {
-  $("w_" + k).oninput = () => { $("n_" + k).value = $("w_" + k).value; remix(); };
+  $("w_" + k).oninput = () => { $("n_" + k).value = $("w_" + k).value; balance(k, +$("w_" + k).value); remix(); };
   $("n_" + k).oninput = () => {
     if ($("n_" + k).value === "") return;
-    const v = Math.max(0, Math.min(100, Math.round(+$("n_" + k).value || 0)));
-    $("w_" + k).value = v; remix();
+    balance(k, Math.max(0, Math.min(100, Math.round(+$("n_" + k).value || 0)))); remix();
   };
   $("n_" + k).onchange = () => { $("n_" + k).value = $("w_" + k).value; };
 }
