@@ -433,13 +433,38 @@ document.addEventListener("click", async (ev) => {
   const say = (t) => document.querySelectorAll(".prmsg").forEach((e) => e.innerHTML = t);
   document.querySelectorAll(".prref").forEach((x) => x.disabled = true);
   try {
-    const r = await api("/props-refresh", { method: "POST", body: JSON.stringify({ date: S.slate && S.slate.contest ? S.slate.contest.slate_date : null }) });
-    say(r.ok ? "Pulling the bookmaker lines now: tap Refresh projections in about 3 minutes."
-             : r.last ? `<span class="warn">Already asked at ${new Date(r.last).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}; lines land about 3 minutes after the ask.</span>`
-             : `<span class="bad">Not pulled: ${r.error}</span>`);
+    const date = S.slate && S.slate.contest ? S.slate.contest.slate_date : null;
+    const r = await api("/props-refresh", { method: "POST", body: JSON.stringify({ date }) });
+    if (r.ok || r.last) {
+      say(r.ok ? "Pulling the bookmaker lines now… this usually takes about a minute. The app will tell you when they're in."
+               : `Already asked at ${hm(r.last)}; waiting for those lines…`);
+      watchProps(date, r.ok ? r.queued : r.last);
+    } else say(`<span class="bad">Not pulled: ${r.error}</span>`);
   } catch (e) { say(`<span class="bad">${e.message}</span>`); }
   setTimeout(() => document.querySelectorAll(".prref").forEach((x) => x.disabled = false), 15000);
 });
+function hm(t) { return new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
+// after a Refresh props tap, watch for the new lines and reload the projections with them
+// (owner, 2 Nov 2026: "how the actual fuck am i supposed to know this? Where does it tell me")
+async function watchProps(date, since) {
+  const say = (t) => document.querySelectorAll(".prmsg").forEach((e) => e.innerHTML = t);
+  const from = new Date(since).getTime() - 5000, until = Date.now() + 5 * 60e3;
+  S.propsWatch = (S.propsWatch || 0) + 1; const me = S.propsWatch;
+  while (Date.now() < until && me === S.propsWatch) {
+    await new Promise((ok) => setTimeout(ok, S.propsPollMs || 10000));
+    // the slate already carries when its newest lines landed (props_at)
+    const id = S.slateId; if (!id) return;
+    let st; try { st = await api("/slate?contest=" + encodeURIComponent(id)); } catch { continue; }
+    if (st.props_at && new Date(st.props_at).getTime() > from) {
+      await loadSlate(true, true);
+      say(`<span class="ok">✓ New lines in at ${hm(st.props_at)}. Projections updated with them.</span>`);
+      toast("New bookmaker lines in");
+      return;
+    }
+    say(`Pulling the bookmaker lines… asked at ${hm(since)}, still waiting (${Math.round((Date.now() - new Date(since).getTime()) / 1000)}s).`);
+  }
+  if (me === S.propsWatch) say(`<span class="warn">No new lines 5 minutes after asking: the pull was skipped or failed (usually the odds credits). The lines shown are still the earlier ones.</span>`);
+}
 function isOut(p) { return p.status && /out|inj|susp|ir\b/i.test(String(p.status)); }
 // the sliders and the typed % boxes move together (owner, 30 Oct 2026: "put the % number directly in"),
 // and the three always add to 100 (owner, 31 Oct 2026): the one you move takes its share, the one you
