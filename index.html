@@ -97,6 +97,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
       <h2>Value <span class="small mute">tap a header to sort · Lock keeps a player in every lineup, Ex keeps him out</span></h2>
       <div class="row small">
         <label class="chk"><input id="onlyproj" type="checkbox" checked> only players with a number</label>
+        <button id="resetmarks" class="mk" title="clear every 🔒 and ✕">Reset locks &amp; excludes</button>
         <input id="find" type="text" placeholder="find a player" style="max-width:220px">
         <button id="refresh2" title="Check all three sources now: fetch Basketball Monster and RotoWire, re-read Drop Coverage">Refresh projections</button>
       </div>
@@ -193,7 +194,7 @@ const API = "https://gpupsgkyyldqyfemtjml.supabase.co/functions/v1/dfs";
 const HIGHS_FACTORY = window.Module;     // highs.js (emscripten) exposes its loader as the global Module in a browser
 const $ = (id) => document.getElementById(id);
 const toast = (m) => { const t = $("toast"); t.textContent = m; t.style.opacity = 1; setTimeout(() => (t.style.opacity = 0), 2600); };
-let S = { slate: null, pool: [], marks: {}, lineups: [], pick: new Set(), highs: null, tab: "contests", sort: { k: "mixv", d: -1 } };
+let S = { slate: null, pool: [], marks: {}, markN: {}, lineups: [], pick: new Set(), highs: null, tab: "contests", sort: { k: "mixv", d: -1 } };
 
 // ── sign-in: the shared PIN, remembered on this phone ───────────────────
 const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
@@ -329,6 +330,7 @@ async function loadSlate(quiet, stay) {
     // (owner, 21 Oct 2026: "I excluded Nembhard from all my teams but he still was built into them")
     const same = !!S.slate && S.slateId === id;
     const keptMarks = same ? Object.fromEntries(Object.entries(S.marks).map(([i, m]) => [S.pool[+i]?.ds_id, m]).filter(([d]) => d != null)) : {};
+    const keptN = same ? Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c]).filter(([d]) => d != null)) : {};
     const keptLineups = same ? (S.lineups || []).map((lu) => lu.map((z) => ({ ...z, ds: S.pool[z.i]?.ds_id }))) : [];
     S.slate = s; S.slateId = id; setTimeout(renderBuildTime, 0);
     S.pool = s.pool.map((p, i) => ({ ...p, i, posList: p.pos })); S.propsK = null;
@@ -375,6 +377,8 @@ async function loadSlate(quiet, stay) {
     const byDs = new Map(S.pool.map((p) => [String(p.ds_id), p.i]));
     S.marks = {};
     for (const [d, m] of Object.entries(keptMarks)) if (byDs.has(String(d))) S.marks[byDs.get(String(d))] = m;
+    S.markN = {};
+    for (const [d, c] of Object.entries(keptN)) if (byDs.has(String(d))) S.markN[byDs.get(String(d))] = c;
     if (same) S.lineups = keptLineups.map((lu) => lu.map(({ ds, ...z }) => ({ ...z, i: byDs.get(String(ds)) }))).filter((lu) => lu.every((z) => z.i != null));
     renderPlayers(); fillBuildPick(s.builds);
     document.querySelectorAll(".tab").forEach((b) => b.disabled = false);
@@ -570,16 +574,30 @@ function renderPlayers() {
   });
   renderMarks();
 }
-// the Build tab's summary of the locks and excludes set on the Value tab
+// the Build tab's locks and excludes, each for a number of the teams (owner, 3 Nov 2026:
+// "select how many teams we want that player locked or excluded from"); no number = every team
+function resetMarks() { S.marks = {}; S.markN = {}; renderPlayers(); }
+$("resetmarks").onclick = resetMarks;
+function nTeams() { return Math.max(1, +$("nlu").value || 1); }
+function markCount(i) { const c = (S.markN || {})[i]; return c != null && c < nTeams() ? c : nTeams(); }
+function fullBan(i) { return S.marks[i] === "ban" && markCount(i) >= nTeams(); }
 function renderMarks() {
   const el = $("markline"); if (!el) return;
-  const names = (m) => Object.entries(S.marks).filter(([, v]) => v === m).map(([i]) => S.pool[+i]?.name).filter(Boolean);
-  const L = names("lock"), B = names("ban");
+  S.markN = S.markN || {};
+  const ids = (m) => Object.entries(S.marks).filter(([, v]) => v === m).map(([i]) => +i).filter((i) => S.pool[i]);
+  const L = ids("lock"), B = ids("ban"), N = nTeams();
+  const row = (i, verb) => `<span class="nowrap">${S.pool[i].name}: ${verb} <input type="number" class="markn" data-i="${i}" min="1" max="${N}" value="${markCount(i)}" style="width:52px"> of ${N} teams</span>`;
   el.innerHTML = (L.length || B.length)
-    ? `${L.length ? `<b>Locked:</b> ${L.join(", ")}` : ""}${L.length && B.length ? " · " : ""}${B.length ? `<b>Excluded:</b> ${B.join(", ")}` : ""} <button id="clearmarks" class="mk">clear all</button>`
-    : `No locks or excludes. Set them on the Value tab: 🔒 keeps a player in every lineup, ✕ keeps him out (and the Swaps tab swaps him out of your entered teams).`;
-  const c = $("clearmarks"); if (c) c.onclick = () => { S.marks = {}; renderPlayers(); };
+    ? `${L.length ? `<b>Locked:</b> ${L.map((i) => row(i, "in")).join(" · ")}` : ""}${L.length && B.length ? "<br>" : ""}${B.length ? `<b>Excluded:</b> ${B.map((i) => row(i, "from")).join(" · ")}` : ""} <button id="clearmarks" class="mk">Reset all</button>`
+    : `No locks or excludes. Set them on the Value tab: 🔒 keeps a player in the lineups, ✕ keeps him out (and the Swaps tab swaps him out of your entered teams). Then set here how many of the teams each applies to.`;
+  const c = $("clearmarks"); if (c) c.onclick = resetMarks;
+  el.querySelectorAll(".markn").forEach((inp) => inp.onchange = () => {
+    const i = +inp.dataset.i, v = Math.max(1, Math.round(+inp.value || N));
+    if (v >= N) delete S.markN[i]; else S.markN[i] = v;
+    inp.value = markCount(i);
+  });
 }
+$("nlu").addEventListener("change", renderMarks);
 
 // ── build ───────────────────────────────────────────────────────────────
 async function getHighs() { if (!S.highs) S.highs = await HIGHS_FACTORY({ locateFile: (f) => "https://cdn.jsdelivr.net/npm/highs@1.15.3/build/" + f }); return S.highs; }
@@ -587,7 +605,7 @@ function solverPool() {
   const w = weights();
   return S.pool.filter((p) => p.salary && p.posList && (S.slate.rules.captain || p.posList.length)).map((p) => ({
     i: p.i, name: p.name, team: p.team, game: p.game, pos: p.posList, salary: p.salary,
-    mean: S.marks[p.i] === "ban" || (isOut(p) && S.marks[p.i] !== "lock") ? 0 : (mixOf(p, w) || 0) }));
+    mean: fullBan(p.i) || (isOut(p) && S.marks[p.i] !== "lock") ? 0 : (mixOf(p, w) || 0) }));
 }
 $("build").onclick = async () => {
   $("build").disabled = true; $("buildmsg").textContent = "Building…";
@@ -604,9 +622,21 @@ $("build").onclick = async () => {
     const pool = solverPool();
     if (!pool.some((p) => p.mean > 0)) throw new Error("no player has a projection in this mix: move up the slider of a source that shows a time under 'Numbers as of'");
     const t0 = Date.now();
-    const lus = window.Lineup.build(h, pool, rules, +$("nlu").value || 1, { minDiff: +$("mindiff").value || 1, locked: locked.map(([i, s]) => [i, s === "ANY" ? "ANY" : (pool.find((p) => p.i === i)?.pos[0] || s)]), banned, maxGames: stacks ? stacks.maxGames : null, games: stacks && stacks.games.length ? new Set(stacks.games) : null });
+    const N = nTeams(), used = {};
+    const base = { minDiff: +$("mindiff").value || 1, maxGames: stacks ? stacks.maxGames : null, games: stacks && stacks.games.length ? new Set(stacks.games) : null };
+    const lockAs = locked.map(([i, s]) => [i, s === "ANY" ? "ANY" : (pool.find((p) => p.i === i)?.pos[0] || s)]);
+    const lus = [];
+    for (let k = 0; k < N; k++) {
+      const lockNow = lockAs.filter(([i]) => (used[i] || 0) < markCount(i));                 // in his first `count` teams
+      const banNow = new Set([...banned].filter((i) => (used[i] || 0) >= N - markCount(i)));   // out of `count` teams
+      const avoid = lus.map((lu) => new Set(lu.map((x) => x.i)));
+      let lu = window.Lineup.solveOne(h, pool, rules, { ...base, locked: lockNow, banned: banNow, avoid });
+      if (!lu && (base.maxGames || base.games)) lu = window.Lineup.solveOne(h, pool, rules, { ...base, maxGames: null, games: null, locked: lockNow, banned: banNow, avoid });   // the stack can't hold: drop it
+      if (!lu) break;
+      lus.push(lu); for (const z of lu) used[z.i] = (used[z.i] || 0) + 1;
+    }
     if (!lus.length) throw new Error("no legal lineup: loosen the locks, or allow more games in the stack");
-    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), stacks };
+    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), mark_counts: Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c])), stacks };
     renderLineups(pool);
     $("buildmsg").textContent = `${lus.length} lineup(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s`;
     $("result").classList.remove("hide"); $("result").scrollIntoView({ behavior: "smooth" });
@@ -1063,7 +1093,7 @@ $("swapcheck").onclick = async () => {
   const w = b.settings?.weights || weights();
   // ✕ on the Value tab = out for the swaps too (owner, 3 Nov 2026: "He's been ruled out!",
   // and no source had caught up): 0 points, swapped out of every team before his game
-  const marked = (p) => S.marks[p.i] === "ban";
+  const marked = (p) => fullBan(p.i);
   const pool = S.pool.filter((p) => p.salary).map((p) => ({ i: p.i, name: p.name, team: p.team, game: p.game, pos: p.posList, salary: p.salary, mean: marked(p) ? 0 : mixOf(p, w) || 0 }));
   const now = Date.now();
   const started = new Set(S.pool.filter((p) => p.tip && new Date(p.tip).getTime() <= now).map((p) => p.i));
@@ -1071,11 +1101,27 @@ $("swapcheck").onclick = async () => {
   const lineups = b.lineups.map((lu) => lu.map((z) => ({ i: byDs.get(String(z.ds_id))?.i, slot: z.slot })).filter((z) => z.i != null));
   const r = window.Lineup.bulkSwaps(pool, S.slate.rules, lineups, started, outNow, 5);
   const by = new Map(S.pool.map((p) => [p.i, p]));
+  const pm = new Map(pool.map((p) => [p.i, p]));
+  const tag = (i) => `${by.get(i).name} <span class="mute">${by.get(i).posList.join("/")} · $${(by.get(i).salary / 1000).toFixed(1)}k · ${outNow.has(i) ? "OUT" : (pm.get(i)?.mean || 0).toFixed(1)}</span>`;
   $("swaplist").innerHTML = r.swaps.length
-    ? r.swaps.map((s) => `<div class="lu"><b>SWAP ${by.get(s.x).name} → ${by.get(s.y).name}</b> · ${outNow.has(s.x) ? "out tonight" : "+" + s.step.toFixed(1) + " pts each"} · ${s.touched.length} team(s)</div>`).join("")
+    ? r.swaps.map((s) => `<div class="lu"><b>SWAP</b> ${tag(s.x)} <b>→</b> ${tag(s.y)} · ${outNow.has(s.x) ? "out tonight" : "+" + s.step.toFixed(1) + " pts each"} · ${s.touched.length} team(s)</div>`).join("")
     : `<p class="ok">No swap worth 5+ points per team. Leave the teams as they are.</p>`;
   const stuck = [...new Set(r.lineups.flatMap((lu) => lu.map((z) => z.i)))].filter((i) => outNow.has(i));
   if (stuck.length) $("swaplist").innerHTML += `<p class="warn">Still in and out tonight (no legal bulk swap covers every team): ${stuck.map((i) => by.get(i).name).join(", ")}</p>`;
+  // replace any one player by hand (owner, 3 Nov 2026): every legal swap for him, best first
+  const held = [...new Set(lineups.flatMap((lu) => lu.map((z) => z.i)))].filter((i) => by.get(i))
+    .sort((a, b) => (outNow.has(b) - outNow.has(a)) || (by.get(a).name > by.get(b).name ? 1 : -1));
+  const nIn = (i) => lineups.filter((lu) => lu.some((z) => z.i === i)).length;
+  $("swaplist").innerHTML += `<div class="row" style="margin-top:10px"><b>Replace a player:</b> <select id="replx" class="grow"><option value="">choose a player in your teams…</option>${held.map((i) => `<option value="${i}">${by.get(i).name}${outNow.has(i) ? " (OUT)" : ""}${started.has(i) ? " (game started)" : ""} · $${(by.get(i).salary / 1000).toFixed(1)}k · in ${nIn(i)} team(s)</option>`).join("")}</select></div><div id="repllist"></div>`;
+  $("replx").onchange = () => {
+    const x = +$("replx").value; if (!$("replx").value) { $("repllist").innerHTML = ""; return; }
+    if (started.has(x)) { $("repllist").innerHTML = `<p class="warn">${by.get(x).name}'s game has started: DraftStars won't swap him now.</p>`; return; }
+    const c = window.Lineup.replacements(pool, S.slate.rules, lineups, x, started, outNow).slice(0, 12);
+    $("repllist").innerHTML = c.length
+      ? `<p class="small mute">Same position, $${(by.get(x).salary / 1000).toFixed(1)}k or less, game not started; best number first. In DraftStars: My Teams → Swap players → ${by.get(x).name} → the player you pick here.</p>`
+        + c.map((o) => `<div class="lu">${tag(o.y)} · ${o.step >= 0 ? "+" : ""}${o.step.toFixed(1)} pts · ${o.touched.length} of ${nIn(x)} team(s)</div>`).join("")
+      : `<p class="warn">No legal replacement for ${by.get(x).name} in your teams (position, salary or the cap).</p>`;
+  };
 };
 refreshSession();
 async function loadBuildsToday() { try { const b = await api("/builds"); if (b.length && !$("contest").value) { $("contest").value = b[0].contest_id; } } catch {} }
