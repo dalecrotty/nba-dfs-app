@@ -934,7 +934,9 @@ async function loadMeasure() {
         // amendment 9: single game, the captain from the 6 highest projected
         propscal_c6: "props, calibrated; captain from the top 6", even_c6: "even split; captain from the top 6",
         // amendment 10: single game, the captain is the favourite's best player
-        propscal_fav: "props, calibrated; captain = the favourite's star", even_fav: "even split; captain = the favourite's star" };
+        propscal_fav: "props, calibrated; captain = the favourite's star", even_fav: "even split; captain = the favourite's star",
+        // amendment 16 (4 Nov 2026): the stud stack
+        studs: "stud stack: 2 of the 4 dearest from the top-total game when it's close (spread under 4.5); props, calibrated otherwise" };
       const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === "props" || m.mix === "props50" || m.mix === "propscal" || SPREAD_TAGS[m.mix] || m.mix === curMix || m.wins > 0 || m.top10 > 0;
       const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
       const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === "fitted" ? " <span class='mute small'>most accurate on earlier slates</span>" : "") + (m.mix === "props" ? " <span class='mute small'>bookmaker props where priced, else even split</span>" : "") + (m.mix === "props50" ? " <span class='mute small'>half props, half even split</span>" : "") + (m.mix === "propscal" ? " <span class='mute small'>props, unpriced players scaled to the props</span>" : "") + (SPREAD_TAGS[m.mix] ? ` <span class='mute small'>${SPREAD_TAGS[m.mix]}</span>` : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");
@@ -953,7 +955,7 @@ async function loadMeasure() {
       + `<details class="card" style="margin-top:14px"><summary><b>More detail</b> <span class="small mute">best combo by slate size, the where-to-play rule, accuracy, slates graded</span></summary>${detail}</details>`;
     // one chart per programme: props calibrated, the even split and Drop Coverage alone,
     // both fees summed night by night
-    const OV = [["propscal", "Props, calibrated", "var(--ok)"], ["33/33/33", "Even split", "var(--acc)"], ["100/0/0", "Drop Coverage only", "var(--warn)"]];
+    const OV = [["propscal", "Props, calibrated", "var(--ok)"], ["33/33/33", "Even split", "var(--acc)"], ["100/0/0", "Drop Coverage only", "var(--warn)"], ["studs", "Stud stack (close top-total game)", "#7b3fbf"]];
     // the verdicts' "without its best night": the leader and the top slider blend
     document.querySelectorAll(".insbest").forEach(async (el) => {
       try {
@@ -972,7 +974,7 @@ async function loadMeasure() {
     });
     document.querySelectorAll(".ovbox").forEach(async (box) => {
       try {
-        const series = await Promise.all(OV.map(async ([mix, label, color]) => {
+        const series = await Promise.all(OV.filter(([mix]) => box.dataset.single === "0" || mix !== "studs").map(async ([mix, label, color]) => {
           const by = {};
           for (const fee of [15, 2]) {
             const qs = new URLSearchParams({ mix, k: String(x), single: box.dataset.single, fee: String(fee), size });
@@ -1032,7 +1034,7 @@ function insights(r, x, size, single) {
   if (!rows.length) return `<div class="card"><h2>${title}: what the results say</h2><p class="mute">Nothing graded at ${x} teams yet${size === "all" ? "" : " for this slate size"}.</p></div>`;
   const pct = (v) => (v >= 0 ? "+" : "−") + Math.abs(v * 100).toFixed(0) + "%";
   const usd = (v) => (v >= 0 ? "+$" : "−$") + Math.abs(v).toFixed(0);
-  const C = { propscal: "Props, calibrated", props: "Props (bookmaker lines only)", "33/33/33": "Even split of DC, BM and RW", fitted: "Most accurate blend (fitted)",
+  const C = { propscal: "Props, calibrated", studs: "Stud stack (close top-total game)", props: "Props (bookmaker lines only)", "33/33/33": "Even split of DC, BM and RW", fitted: "Most accurate blend (fitted)",
     "100/0/0": "Drop Coverage alone", "0/100/0": "Basketball Monster alone", "0/0/100": "RotoWire alone" };
   const cands = Object.keys(C).map((m) => ({ m, ...A(m) })).filter((c) => c.cost);
   const line = (c) => `<b>${C[c.m]}</b>: <b class="${c.roi >= 0 ? "ok" : "bad"}">${pct(c.roi)}</b> (${usd(c.profit)}), money back in ${Math.round(100 * c.pp)}% of ${c.contests} contests.`;
