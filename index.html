@@ -35,6 +35,7 @@ tbody tr:nth-child(even) td{background:var(--zebra)}tbody tr{cursor:pointer}
 button.mk{padding:2px 7px;font-size:13px;margin:0 2px;background:var(--card);border:1px solid var(--line);color:var(--mute);border-radius:6px}button.mk.on{background:var(--acc);color:#fff;border-color:var(--acc)}td.nowrap{white-space:nowrap}
 td.v1{background:var(--v1)!important}td.v2{background:var(--v2)!important}td.v3{background:var(--v3)!important;font-weight:600}
 td.mixv{font-weight:700}
+tr.studg td{background:#f4eefc}.studtag{display:inline-block;font-size:11px;font-weight:600;padding:0 6px;border-radius:999px;margin-left:4px;white-space:nowrap}.studtag.s{background:#7b3fbf;color:#fff}.studtag.c{background:#e6f4ea;color:#1a7f4b;border:1px solid #1a7f4b}#studbar{margin:8px 0 0;padding:8px 10px;border-radius:8px;border:1px solid var(--line)}#studbar.yes{border-color:#7b3fbf;background:#f4eefc}
 tr.lock td{background:var(--lock)!important}tr.pnlrow{cursor:pointer}tr.pnlsel td{box-shadow:inset 0 -2px 0 var(--acc)}.pnl{padding:6px 0}.pnl table{margin-top:4px}tr.win td{background:var(--win)!important}tr.top td{background:var(--top)!important}tr.ban td{background:var(--ban)!important;text-decoration:line-through;color:var(--mute)}
 .mark{display:inline-block;width:22px;text-align:center;color:var(--mute)}
 .pill{display:inline-block;padding:1px 7px;border-radius:999px;border:1px solid var(--line);font-size:12px;margin-right:4px}
@@ -102,6 +103,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
         <button id="refresh2" title="Check all three sources now: fetch Basketball Monster and RotoWire, re-read Drop Coverage">Refresh projections</button>
       </div>
       <p id="ages2" class="small mute" style="margin:6px 0 0"></p>
+      <div id="studbar" class="small hide"></div>
       <div class="tablewrap"><table id="ptable"><thead><tr>
         <th class="c" data-k="mark">Lock / Ex</th><th class="c" data-k="rank">#</th><th class="l" data-k="name">Player</th><th class="l" data-k="team">Team</th><th class="l" data-k="pos">Pos</th><th data-k="salary">Price</th>
         <th class="grp" data-k="dc">DC</th><th data-k="dcv">Val</th><th class="grp" data-k="bm">BM</th><th data-k="bmv">Val</th><th class="grp" data-k="rw">RW</th><th data-k="rwv">Val</th>
@@ -120,7 +122,10 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
         <label class="chk">Differ by <input id="mindiff" type="number" min="1" max="8" value="3" style="width:60px"></label>
         <label class="chk">Max per team <input id="maxteam" type="number" min="1" max="9" value="5" style="width:60px"></label>
         <label class="chk"><input id="usestacks" type="checkbox"> Game stacks</label>
+        <label class="chk" title="On a stud night: every team holds 2+ of the 4 studs and 3+ of the 5 best values (FINDINGS F43, F46). Other nights: the normal build."><input id="studmode" type="checkbox"> Stud method</label>
+        <button id="studset" title="Props calibrated, 10 teams, differing by 3, Stud method on">Stud method setup</button>
       </div>
+      <p id="studline" class="small" style="margin:6px 0 0"></p>
       <p id="markline" class="small mute" style="margin:6px 0 0"></p>
       <div id="stacks" class="hide small">
         <div class="row"><label class="chk">Each lineup from at most <input id="nstack" type="number" min="1" max="9" value="2" style="width:56px"> games</label></div>
@@ -188,7 +193,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
 <div id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/highs@1.15.3/build/highs.js"></script>
-<script src="https://gpupsgkyyldqyfemtjml.supabase.co/functions/v1/dfs/lineup.js"></script>
+<script src="lineup.js"></script>
 <script>
 const API = "https://gpupsgkyyldqyfemtjml.supabase.co/functions/v1/dfs";
 const HIGHS_FACTORY = window.Module;     // highs.js (emscripten) exposes its loader as the global Module in a browser
@@ -215,6 +220,26 @@ $("pinok").onclick = async () => {
 };
 $("pin").onkeydown = (e) => { if (e.key === "Enter") $("pinok").click(); };
 $("signout").onclick = () => { store.set("dfs_pin", null); S.slate = null; location.reload(); };
+
+// tonight's bookmaker game lines for the stud method (the dfs-lines function, owner 4 Nov 2026):
+// each game's median total and home spread across books, matched to DraftStars' codes
+const LINES_API = "https://gpupsgkyyldqyfemtjml.supabase.co/functions/v1/dfs-lines";
+const CODE_ALIAS = { PHO: "PHX", NO: "NOP", GS: "GSW", NY: "NYK", SA: "SAS", UTAH: "UTA", WSH: "WAS", BRK: "BKN", CHO: "CHA" };
+const code = (t) => { const u = String(t || "").toUpperCase(); return CODE_ALIAS[u] || u; };
+async function attachLines(s) {
+  if (!s || !s.contest || !s.contest.slate_date || s.contest.is_captain) return;
+  try {
+    const r = await fetch(LINES_API + "?date=" + s.contest.slate_date, { headers: { "x-app-pin": store.get("dfs_pin") || "" } });
+    const j = await r.json();
+    const by = new Map((j.games || []).map((g) => [`${g.away}@${g.home}`, g]));
+    for (const g of s.games || []) {
+      const l = by.get(`${code(g.away)}@${code(g.home)}`);
+      g.btotal = l && l.total != null ? l.total : null;
+      g.spread = l && l.spread != null ? l.spread : null;
+    }
+    s.lines_ok = true;
+  } catch (e) { s.lines_ok = false; }
+}
 
 async function api(path, opts = {}) {
   const r = await fetch(API + "/api" + path, { ...opts, headers: { ...(opts.headers || {}), "x-app-pin": store.get("dfs_pin") || "", "x-app-user": store.get("dfs_name") || "Dale", "content-type": "application/json" } });
@@ -332,6 +357,7 @@ async function loadSlate(quiet, stay) {
     const keptMarks = same ? Object.fromEntries(Object.entries(S.marks).map(([i, m]) => [S.pool[+i]?.ds_id, m]).filter(([d]) => d != null)) : {};
     const keptN = same ? Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c]).filter(([d]) => d != null)) : {};
     const keptLineups = same ? (S.lineups || []).map((lu) => lu.map((z) => ({ ...z, ds: S.pool[z.i]?.ds_id }))) : [];
+    await attachLines(s);
     S.slate = s; S.slateId = id; setTimeout(renderBuildTime, 0);
     S.pool = s.pool.map((p, i) => ({ ...p, i, posList: p.pos })); S.propsK = null;
     const c = s.contest, n = S.pool.filter((p) => p.dc != null).length;
@@ -472,6 +498,46 @@ async function watchProps(date, since) {
   if (me === S.propsWatch) say(`<span class="warn">No new lines 5 minutes after asking: the pull was skipped or failed (usually the odds credits). The lines shown are still the earlier ones.</span>`);
 }
 function isOut(p) { return p.status && /out|inj|susp|ir\b/i.test(String(p.status)); }
+// -- the stud method (owner, 4 Nov 2026; FINDINGS F38, F43, F46; Measurement "studcore") --
+// A stud night: the slate's highest bookmaker total (median across books) is also close
+// (spread under 4.5). Then every team holds 2+ of that game's four studs (each side's two
+// dearest projected above 0) and 3+ of the slate's 5 best values (projected 15+, studs left
+// out), on props calibrated; the solver picks which, and fills the rest. Other nights: the
+// normal props-calibrated build. Numbers are props calibrated whatever the sliders say.
+const STUD_SPREAD = 4.5, CORE_N = 5, CORE_MIN = 15;
+function propscalOf(p) {
+  const w = { dc: 1 / 3, bm: 1 / 3, rw: 1 / 3 };
+  if (p.pr != null && !prStale(p)) return p.pr;
+  const m = baseMix(p, w); return m == null ? null : m * propsK(w);
+}
+function studPlan() {
+  if (!S.slate || S.slate.rules.captain) return null;
+  const all = S.slate.games || [];
+  const priced = all.filter((g) => g.btotal != null && g.spread != null);
+  const missing = all.filter((g) => g.btotal == null || g.spread == null);
+  if (!priced.length) return { top: null, close: false, studs: [], core: [], missing, failed: S.slate.lines_ok === false };
+  const top = [...priced].sort((a, b) => b.btotal - a.btotal || Math.abs(a.spread) - Math.abs(b.spread))[0];
+  const close = Math.abs(top.spread) < STUD_SPREAD;
+  const num = (p) => (fullBan(p.i) || isOut(p) ? 0 : propscalOf(p) || 0);
+  const studs = [];
+  if (close) for (const t of [...new Set(S.pool.filter((p) => p.game === top.id).map((p) => p.team))])
+    studs.push(...S.pool.filter((p) => p.game === top.id && p.team === t && p.salary && num(p) > 0).sort((a, b) => b.salary - a.salary).slice(0, 2));
+  const sset = new Set(studs.map((p) => p.i));
+  const core = close ? S.pool.filter((p) => !sset.has(p.i) && p.salary && num(p) >= CORE_MIN).sort((a, b) => num(b) / b.salary - num(a) / a.salary).slice(0, CORE_N) : [];
+  return { top, close, studs, core, missing };
+}
+function gameLine(g) {
+  const s = Math.abs(g.spread), fav = g.spread < 0 ? g.home : g.away;
+  return `${g.away} @ ${g.home}: total ${g.btotal}, ${s === 0 ? "pick'em" : `${fav} by ${s}`}`;
+}
+function studText(plan, short) {
+  if (!plan) return "";
+  const miss = plan.missing.length ? ` <span class="warn">No bookmaker line yet for ${plan.missing.map((g) => `${g.away} @ ${g.home}`).join(", ")}: the pick can change when they're posted.</span>` : "";
+  if (!plan.top) return plan.failed ? `<span class="warn">Stud method: couldn't read tonight's bookmaker lines. Tap Refresh projections to try again.</span>` : `Stud method: no bookmaker totals and spreads for tonight's games yet (the game lines come with the 4:45am pull).`;
+  if (!plan.close) return `<b>Not a stud night.</b> The top total is ${gameLine(plan.top)} (spread 4.5+), so the method builds normal props calibrated.${miss}`;
+  const nm = (xs) => xs.map((p) => `${p.name} $${(p.salary / 1000).toFixed(1)}k`).join(", ");
+  return `<b>⭐ Stud night:</b> ${gameLine(plan.top)}.${short ? "" : ` Every team holds 2+ of the <span class="studtag s">stud</span> players and 3+ of the <span class="studtag c">value core</span>.`}<br><b>Studs:</b> ${nm(plan.studs)}<br><b>Value core:</b> ${nm(plan.core)}${miss}`;
+}
 // the sliders and the typed % boxes move together (owner, 30 Oct 2026: "put the % number directly in"),
 // and the three always add to 100 (owner, 31 Oct 2026): the one you move takes its share, the one you
 // set just before it keeps its own (as far as it fits), the third takes the rest; straight after a
@@ -515,7 +581,7 @@ function renderStacks() {
   const n = Math.max(1, Math.min(+$("nstack").value || 2, S.slate.games.length));
   const ranked = [...S.slate.games].sort((a, b) => stackScore(b) - stackScore(a));
   const top = new Set(ranked.slice(0, n).map((g) => g.id));
-  $("stacklist").innerHTML = ranked.map((g) => `<label class="chk" style="display:flex"><input type="checkbox" class="stk" data-g="${g.id}" ${top.has(g.id) ? "checked" : ""}> <b>${g.away}@${g.home}</b>&nbsp;· total ${g.total != null ? g.total : "?"}${(g.key_out || []).length ? ` · <span class="warn">out: ${g.key_out.join(", ")}</span>` : ""}</label>`).join("");
+  $("stacklist").innerHTML = ranked.map((g) => `<label class="chk" style="display:flex"><input type="checkbox" class="stk" data-g="${g.id}" ${top.has(g.id) ? "checked" : ""}> <b>${g.away}@${g.home}</b>&nbsp;· total ${g.total != null ? g.total : "?"}${g.spread != null ? `, spread ${Math.abs(g.spread)}` : ""}${(g.key_out || []).length ? ` · <span class="warn">out: ${g.key_out.join(", ")}</span>` : ""}</label>`).join("");
 }
 $("nstack").onchange = renderStacks;
 
@@ -557,9 +623,15 @@ function renderPlayers() {
   const f = (v, dp = 1) => (v == null ? "" : (+v).toFixed(dp));
   const pct = (v) => (v == null ? "" : Math.round(100 * v) + "%");
   const tint = (v) => (v == null ? "" : v >= 1.1 ? "v3" : v >= 1 ? "v2" : v >= 0.9 ? "v1" : "");
-  $("ptable").querySelector("tbody").innerHTML = rows.map((p, n) => `<tr data-i="${p.i}" class="${S.marks[p.i] || ""}">
+  // the stud method: highlight the stud game, its studs and the value core (owner, 4 Nov 2026)
+  const plan = studPlan();
+  const sIds = new Set(plan && plan.close ? plan.studs.map((p) => p.i) : []), cIds = new Set(plan && plan.close ? plan.core.map((p) => p.i) : []);
+  const sg = plan && plan.close ? plan.top.id : null;
+  const bar = $("studbar");
+  if (bar) { bar.innerHTML = plan ? studText(plan) : ""; bar.classList.toggle("hide", !plan); bar.classList.toggle("yes", !!(plan && plan.close)); }
+  $("ptable").querySelector("tbody").innerHTML = rows.map((p, n) => `<tr data-i="${p.i}" class="${S.marks[p.i] || (p.game === sg ? "studg" : "")}">
     <td class="c nowrap"><button class="mk ${S.marks[p.i] === "lock" ? "on" : ""}" data-act="lock" data-i="${p.i}" title="lock into every lineup">🔒</button><button class="mk ${S.marks[p.i] === "ban" ? "on" : ""}" data-act="ban" data-i="${p.i}" title="out: exclude from every lineup, and swap him out on the Swaps tab">✕</button></td><td class="c mute">${n + 1}</td>
-    <td class="l"><b>${p.name}</b>${isOut(p) ? ' <span class="bad small">OUT</span>' : ""}${p.player_id == null ? ' <span class="warn small" title="no match to our player list">?</span>' : ""}</td>
+    <td class="l"><b>${p.name}</b>${sIds.has(p.i) ? '<span class="studtag s">stud</span>' : ""}${cIds.has(p.i) ? '<span class="studtag c">value core</span>' : ""}${isOut(p) ? ' <span class="bad small">OUT</span>' : ""}${p.player_id == null ? ' <span class="warn small" title="no match to our player list">?</span>' : ""}</td>
     <td class="l">${p.team || ""}</td><td class="l">${p.posStr}</td><td>${p.salary ? "$" + p.salary.toLocaleString() : ""}</td>
     <td class="grp">${f(p.dc)}</td><td class="${tint(p.dcv)}">${pct(p.dcv)}</td>
     <td class="grp">${f(p.bm)}</td><td class="${tint(p.bmv)}">${pct(p.bmv)}</td>
@@ -573,6 +645,7 @@ function renderPlayers() {
     renderPlayers();
   });
   renderMarks();
+  renderStudLine();
 }
 // the Build tab's locks and excludes, each for a number of the teams (owner, 3 Nov 2026:
 // "select how many teams we want that player locked or excluded from"); no number = every team
@@ -625,6 +698,11 @@ $("build").onclick = async () => {
     const N = nTeams(), used = {};
     const base = { minDiff: +$("mindiff").value || 1, maxGames: stacks ? stacks.maxGames : null, games: stacks && stacks.games.length ? new Set(stacks.games) : null };
     const lockAs = locked.map(([i, s]) => [i, s === "ANY" ? "ANY" : (pool.find((p) => p.i === i)?.pos[0] || s)]);
+    const plan = $("studmode").checked ? studPlan() : null;
+    if (plan && plan.close) {
+      if (plan.studs.length < 2 || plan.core.length < 3) throw new Error("stud night, but too few studs or value players have a projection: check the Value tab");
+      base.require = [{ ids: new Set(plan.studs.map((p) => p.i)), k: 2 }, { ids: new Set(plan.core.map((p) => p.i)), k: 3 }];
+    }
     const lus = [];
     for (let k = 0; k < N; k++) {
       const lockNow = lockAs.filter(([i]) => (used[i] || 0) < markCount(i));                 // in his first `count` teams
@@ -635,13 +713,25 @@ $("build").onclick = async () => {
       if (!lu) break;
       lus.push(lu); for (const z of lu) used[z.i] = (used[z.i] || 0) + 1;
     }
-    if (!lus.length) throw new Error("no legal lineup: loosen the locks, or allow more games in the stack");
-    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), mark_counts: Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c])), stacks };
+    if (!lus.length) throw new Error(base.require ? "no legal lineup with the stud method's studs and value core: loosen the locks or excludes" : "no legal lineup: loosen the locks, or allow more games in the stack");
+    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), mark_counts: Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c])), stacks,
+      stud: plan ? { night: !!plan.close, game: plan.top ? `${plan.top.away}@${plan.top.home}` : null, total: plan.top ? plan.top.btotal : null, spread: plan.top ? plan.top.spread : null,
+                     studs: plan.close ? plan.studs.map((p) => p.ds_id) : [], core: plan.close ? plan.core.map((p) => p.ds_id) : [] } : null };
     renderLineups(pool);
-    $("buildmsg").textContent = `${lus.length} lineup(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s`;
+    $("buildmsg").textContent = `${lus.length} lineup(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s${plan ? (plan.close ? " · stud method: stud night" : " · stud method: not a stud night, normal build") : ""}`;
     $("result").classList.remove("hide"); $("result").scrollIntoView({ behavior: "smooth" });
   } catch (e) { $("buildmsg").innerHTML = `<span class="bad">${e.message}</span>`; }
   $("build").disabled = false;
+};
+function renderStudLine() {
+  const el = $("studline"); if (!el) return;
+  if (!$("studmode").checked) { el.innerHTML = ""; return; }
+  el.innerHTML = studText(studPlan(), true);
+}
+$("studmode").onchange = renderStudLine;
+$("studset").onclick = () => {
+  setMix(33, 33, 33); $("propsmode").value = "cal"; $("nlu").value = 10; $("mindiff").value = 3; $("studmode").checked = true;
+  remix(); renderMarks(); renderStudLine();
 };
 function lineupProj(lu, pool) { const by = new Map(pool.map((p) => [p.i, p])); return lu.reduce((a, z) => a + (z.slot === "CAP" ? 1.5 : 1) * (by.get(z.i)?.mean || 0), 0); }
 function renderLineups(pool) {
@@ -936,7 +1026,8 @@ async function loadMeasure() {
         // amendment 10: single game, the captain is the favourite's best player
         propscal_fav: "props, calibrated; captain = the favourite's star", even_fav: "even split; captain = the favourite's star",
         // amendment 16 (4 Nov 2026): the stud stack
-        studs: "stud stack: 2 of the 4 dearest from the top-total game when it's close (spread under 4.5); props, calibrated otherwise" };
+        studs: "stud stack: 2 of the 4 dearest from the top-total game when it's close (spread under 4.5); props, calibrated otherwise",
+        studcore: "stud method: the stud stack + 3 of the slate's 5 best values in every team on stud nights; props, calibrated otherwise" };
       const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === "props" || m.mix === "props50" || m.mix === "propscal" || SPREAD_TAGS[m.mix] || m.mix === curMix || m.wins > 0 || m.top10 > 0;
       const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
       const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === "fitted" ? " <span class='mute small'>most accurate on earlier slates</span>" : "") + (m.mix === "props" ? " <span class='mute small'>bookmaker props where priced, else even split</span>" : "") + (m.mix === "props50" ? " <span class='mute small'>half props, half even split</span>" : "") + (m.mix === "propscal" ? " <span class='mute small'>props, unpriced players scaled to the props</span>" : "") + (SPREAD_TAGS[m.mix] ? ` <span class='mute small'>${SPREAD_TAGS[m.mix]}</span>` : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");
@@ -955,7 +1046,7 @@ async function loadMeasure() {
       + `<details class="card" style="margin-top:14px"><summary><b>More detail</b> <span class="small mute">best combo by slate size, the where-to-play rule, accuracy, slates graded</span></summary>${detail}</details>`;
     // one chart per programme: props calibrated, the even split and Drop Coverage alone,
     // both fees summed night by night
-    const OV = [["propscal", "Props, calibrated", "var(--ok)"], ["33/33/33", "Even split", "var(--acc)"], ["100/0/0", "Drop Coverage only", "var(--warn)"], ["studs", "Stud stack (close top-total game)", "#7b3fbf"]];
+    const OV = [["propscal", "Props, calibrated", "var(--ok)"], ["33/33/33", "Even split", "var(--acc)"], ["100/0/0", "Drop Coverage only", "var(--warn)"], ["studcore", "Stud method (studs + value core)", "#7b3fbf"]];
     // the verdicts' "without its best night": the leader and the top slider blend
     document.querySelectorAll(".insbest").forEach(async (el) => {
       try {
@@ -974,7 +1065,7 @@ async function loadMeasure() {
     });
     document.querySelectorAll(".ovbox").forEach(async (box) => {
       try {
-        const series = await Promise.all(OV.filter(([mix]) => box.dataset.single === "0" || mix !== "studs").map(async ([mix, label, color]) => {
+        const series = await Promise.all(OV.filter(([mix]) => box.dataset.single === "0" || !["studs", "studcore"].includes(mix)).map(async ([mix, label, color]) => {
           const by = {};
           for (const fee of [15, 2]) {
             const qs = new URLSearchParams({ mix, k: String(x), single: box.dataset.single, fee: String(fee), size });
@@ -1034,7 +1125,7 @@ function insights(r, x, size, single) {
   if (!rows.length) return `<div class="card"><h2>${title}: what the results say</h2><p class="mute">Nothing graded at ${x} teams yet${size === "all" ? "" : " for this slate size"}.</p></div>`;
   const pct = (v) => (v >= 0 ? "+" : "−") + Math.abs(v * 100).toFixed(0) + "%";
   const usd = (v) => (v >= 0 ? "+$" : "−$") + Math.abs(v).toFixed(0);
-  const C = { propscal: "Props, calibrated", studs: "Stud stack (close top-total game)", props: "Props (bookmaker lines only)", "33/33/33": "Even split of DC, BM and RW", fitted: "Most accurate blend (fitted)",
+  const C = { propscal: "Props, calibrated", studcore: "Stud method (studs + value core)", studs: "Stud stack (close top-total game)", props: "Props (bookmaker lines only)", "33/33/33": "Even split of DC, BM and RW", fitted: "Most accurate blend (fitted)",
     "100/0/0": "Drop Coverage alone", "0/100/0": "Basketball Monster alone", "0/0/100": "RotoWire alone" };
   const cands = Object.keys(C).map((m) => ({ m, ...A(m) })).filter((c) => c.cost);
   const line = (c) => `<b>${C[c.m]}</b>: <b class="${c.roi >= 0 ? "ok" : "bad"}">${pct(c.roi)}</b> (${usd(c.profit)}), money back in ${Math.round(100 * c.pp)}% of ${c.contests} contests.`;
