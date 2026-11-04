@@ -949,11 +949,27 @@ async function loadMeasure() {
     // fold away under More detail
     const progsShown = size === "all" ? [false, true] : [size === "single"];
     const overview = progsShown.map((sg) => `<div class="card ovbox" data-single="${sg ? 1 : 0}"><h2>${sg ? "Single game" : "Multi-game"}: running profit <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest · $15 and $2 · ${period}</span></h2><div class="ov mute small">Loading…</div></div>`).join("");
-    $("results").innerHTML = overview + html
+    $("results").innerHTML = progsShown.map((sg) => insights(r, x, size, sg)).join("") + overview + html
       + `<details class="card" style="margin-top:14px"><summary><b>More detail</b> <span class="small mute">best combo by slate size, the where-to-play rule, accuracy, slates graded</span></summary>${detail}</details>`;
     // one chart per programme: props calibrated, the even split and Drop Coverage alone,
     // both fees summed night by night
     const OV = [["propscal", "Props, calibrated", "var(--ok)"], ["33/33/33", "Even split", "var(--acc)"], ["100/0/0", "Drop Coverage only", "var(--warn)"]];
+    // the verdicts' "without its best night": the leader and the top slider blend
+    document.querySelectorAll(".insbest").forEach(async (el) => {
+      try {
+        let cost = 0, won = 0; const nights = {};
+        for (const fee of [15, 2]) {
+          const qs = new URLSearchParams({ mix: el.dataset.mix, k: String(x), single: el.dataset.single, fee: String(fee), size });
+          if (rg) { qs.set("from", rg[0]); qs.set("to", rg[1]); }
+          for (const n of (await api("/pnl?" + qs)).nights || []) { cost += n.cost; won += n.won; nights[n.date] = (nights[n.date] || 0) + n.won - n.cost; }
+        }
+        const best = Math.max(0, ...Object.values(nights)), rest = won - cost - best;
+        if (!cost) { el.textContent = ""; return; }
+        const pct = (100 * rest / cost).toFixed(0);
+        el.innerHTML = rest > 0 ? `Still <b class="ok">+${pct}%</b> without its best night: it isn't one lucky result.`
+          : `Without its best night it's <b class="bad">${pct}%</b>: one big result is carrying it.`;
+      } catch (e) { el.textContent = ""; }
+    });
     document.querySelectorAll(".ovbox").forEach(async (box) => {
       try {
         const series = await Promise.all(OV.map(async ([mix, label, color]) => {
@@ -997,6 +1013,66 @@ async function loadMeasure() {
       loadMeasure();
     });
   } catch (e) { $("results").innerHTML = `<span class="bad">${e.message}</span>`; }
+}
+
+// What the results say (owner, 4 Nov 2026: "what is going well? And why? What is not going
+// well? What model is good? What model is bad? What blend is working and why? ... high level
+// detail to help me make decisions"): plain sentences from the same grades as the tables
+function insights(r, x, size, single) {
+  const buckets = single ? ["single"] : ["2-3", "4-6", "7+"].filter((b) => size === "all" || b === size);
+  const rows = (r.mixes || []).filter((m) => !!m.single === single && +m.k === x && buckets.includes(m.bucket));
+  const agg = {};
+  for (const m of rows) { const z = agg[m.mix] || (agg[m.mix] = { mix: m.mix, cost: 0, won: 0, contests: 0, profited: 0 }); z.cost += m.cost; z.won += m.won; z.contests += m.contests; z.profited += m.profited || 0; }
+  const A = (mix) => { const z = agg[mix]; return z && z.cost ? { ...z, roi: z.won / z.cost - 1, profit: z.won - z.cost, pp: z.contests ? z.profited / z.contests : 0 } : null; };
+  const acc = {};
+  for (const a of (r.accuracy || []).filter((a) => buckets.includes(a.bucket))) { const z = acc[a.mix] || (acc[a.mix] = { n: 0, mae: 0, bias: 0, slates: 0 }); z.n += a.players; z.mae += a.mae * a.players; z.bias += a.bias * a.players; z.slates += a.slates; }
+  const ACC = (mix) => { const z = acc[mix]; return z && z.n ? { mae: z.mae / z.n, bias: z.bias / z.n, slates: z.slates } : null; };
+  const title = single ? "Single game" : "Multi-game";
+  const slates = Math.max(0, ...rows.map((m) => m.slates)) && buckets.reduce((t, b) => t + Math.max(0, ...rows.filter((m) => m.bucket === b).map((m) => m.slates)), 0);
+  if (!rows.length) return `<div class="card"><h2>${title}: what the results say</h2><p class="mute">Nothing graded at ${x} teams yet${size === "all" ? "" : " for this slate size"}.</p></div>`;
+  const pct = (v) => (v >= 0 ? "+" : "−") + Math.abs(v * 100).toFixed(0) + "%";
+  const usd = (v) => (v >= 0 ? "+$" : "−$") + Math.abs(v).toFixed(0);
+  const C = { propscal: "Props, calibrated", props: "Props (bookmaker lines only)", "33/33/33": "Even split of DC, BM and RW", fitted: "Most accurate blend (fitted)",
+    "100/0/0": "Drop Coverage alone", "0/100/0": "Basketball Monster alone", "0/0/100": "RotoWire alone" };
+  const cands = Object.keys(C).map((m) => ({ m, ...A(m) })).filter((c) => c.cost);
+  const line = (c) => `<b>${C[c.m]}</b>: <b class="${c.roi >= 0 ? "ok" : "bad"}">${pct(c.roi)}</b> (${usd(c.profit)}), money back in ${Math.round(100 * c.pp)}% of ${c.contests} contests.`;
+  const good = cands.filter((c) => c.roi > 0.1).sort((a, b) => b.roi - a.roi), bad = cands.filter((c) => c.roi < -0.1).sort((a, b) => a.roi - b.roi);
+  const lead = good[0];
+  const even = ACC("33/33/33");
+  const why = (m) => {
+    const a = ACC(m); if (!a || !even) return "";
+    const bits = [];
+    if (m === "propscal" || m === "props") bits.push("the bookmakers' lines carry late news, minutes and roles that our three sources are slower to");
+    if (a.mae < even.mae - 0.05) bits.push(`its numbers miss by less (${a.mae.toFixed(1)} points a player against ${even.mae.toFixed(1)} for the even split)`);
+    if (Math.abs(a.bias) < Math.abs(even.bias) - 0.3) bits.push(`and run less high (${a.bias >= 0 ? "+" : "−"}${Math.abs(a.bias).toFixed(1)} a player against +${even.bias.toFixed(1)}), so it doesn't overrate the starters everyone picks`);
+    if (a.mae > even.mae + 0.05) bits.push(`its numbers miss by more than the blend (${a.mae.toFixed(1)} against ${even.mae.toFixed(1)})`);
+    if (a.bias > even.bias + 0.2) bits.push(`and it runs ${a.bias.toFixed(1)} points a player too high`);
+    return bits.length ? `<div class="small" style="margin:2px 0 6px 0">Why: ${bits.join("; ")}.</div>` : "";
+  };
+  // sources on their own: money and accuracy side by side
+  const SRC = [["100/0/0", "Drop Coverage"], ["0/100/0", "Basketball Monster"], ["0/0/100", "RotoWire"], ["propscal", "Bookmaker props (calibrated)"]];
+  const srcRows = SRC.map(([m, label]) => { const z = A(m), a = ACC(m); return z ? `<tr><td class="l">${label}</td><td><b class="${z.roi >= 0 ? "ok" : "bad"}">${pct(z.roi)}</b></td><td>${a ? a.mae.toFixed(2) : "—"}</td><td>${a ? (a.bias >= 0 ? "+" : "−") + Math.abs(a.bias).toFixed(1) : "—"}</td></tr>` : ""; }).join("");
+  const bestAcc = SRC.map(([m, label]) => ({ label, a: ACC(m) })).filter((z) => z.a).sort((p, q) => p.a.mae - q.a.mae)[0];
+  // the 66 slider blends: balanced against leaning on one source
+  const grid = Object.values(agg).filter((z) => /^\d+\/\d+\/\d+$/.test(z.mix) && z.mix !== "33/33/33" && z.cost).map((z) => ({ ...z, w: z.mix.split("/").map(Number), roi: z.won / z.cost - 1 }));
+  const avg = (xs) => (xs.length ? xs.reduce((t, z) => t + z.roi, 0) / xs.length : null);
+  const balanced = avg(grid.filter((z) => z.w.every((v) => v >= 20 && v <= 50))), leaning = avg(grid.filter((z) => z.w.some((v) => v >= 70)));
+  const top = [...grid].sort((a, b) => b.roi - a.roi)[0];
+  const sure = slates >= 40 ? "Enough slates to act on (40+)." : `${slates} of 40 slates graded: a lean, not proof yet.`;
+  return `<div class="card" style="border-color:var(--acc)"><h2>${title}: what the results say <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest · $15 and $2 together</span></h2>
+    <p style="margin:4px 0 10px;font-size:16px">${lead ? `<b>Build with ${C[lead.m]}.</b> ${pct(lead.roi)} (${usd(lead.profit)}), money back in ${Math.round(100 * lead.pp)}% of contests.` : "<b>Nothing is clearly making money yet.</b> Keep stakes small."} <span class="mute small">${sure}</span></p>
+    ${lead ? `<div class="small insbest" data-mix="${lead.m}" data-single="${single ? 1 : 0}"></div>` : ""}
+    <h3 style="margin:12px 0 4px">Going well</h3>
+    ${good.length ? good.map((c) => `<div>${line(c)}</div>${c === lead ? why(c.m) : ""}`).join("") : `<div class="mute">Nothing above +10% yet.</div>`}
+    <h3 style="margin:12px 0 4px">Not going well</h3>
+    ${bad.length ? bad.map((c) => `<div>${line(c)}</div>${why(c.m)}`).join("") : `<div class="mute">Nothing below −10%.</div>`}
+    <h3 style="margin:12px 0 4px">The models on their own</h3>
+    <div class="tablewrap"><table><thead><tr><th class="l">Source alone</th><th>ROI</th><th>avg miss</th><th>high (+) / low (−)</th></tr></thead><tbody>${srcRows}</tbody></table></div>
+    <div class="small" style="margin-top:4px">${bestAcc ? `Most accurate: <b>${bestAcc.label}</b>. ` : ""}Avg miss = DraftStars points a player off, on average; high/low = how far it overrates (+) or underrates (−) players on average.</div>
+    <h3 style="margin:12px 0 4px">Blends</h3>
+    <div>${balanced != null && leaning != null ? `Blends with 20–50% of each source average <b class="${balanced >= 0 ? "ok" : "bad"}">${pct(balanced)}</b>; blends leaning 70%+ on one source average <b class="${leaning >= 0 ? "ok" : "bad"}">${pct(leaning)}</b>. ${balanced > leaning ? "Mixing the sources beats trusting any one of them: their errors partly cancel." : "Leaning on one source has done better so far."}` : ""}</div>
+    ${top ? `<div style="margin-top:4px">Best slider blend: <b>${top.mix}</b> ${pct(top.roi)}. <span class="small insbest" data-mix="${top.mix}" data-single="${single ? 1 : 0}"></span></div>` : ""}
+  </div>`;
 }
 
 // several combos' running profit on one chart (the Measurement overview, 4 Nov 2026)
