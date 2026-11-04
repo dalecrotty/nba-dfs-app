@@ -1037,12 +1037,12 @@ async function loadMeasure() {
       const nights = Math.max(...rows.map((m) => m.slates));
       html += `<p class="small mute">${nights} slate(s) graded. ${nights < 40 ? "Descriptive only until 40 slates." : "The adoption bar applies (PREREG_sources.md)."}</p>`;
     }
-    // the ROI tables and the charts first (owner, 4 Nov 2026: "I like the ROI tables and
-    // graphs"); best combo by size, the where-to-play rule, accuracy and the slates graded
-    // fold away under More detail
+    // what the results say, then the ROI tables; best combo by size, the where-to-play rule,
+    // accuracy and the slates graded fold away under More detail (owner, 4 Nov 2026). The
+    // running-profit overview chart is gone (owner, 4 Nov 2026: "Remove this shit graph");
+    // tapping a row still opens that combo's own profit night by night
     const progsShown = size === "all" ? [false, true] : [size === "single"];
-    const overview = progsShown.map((sg) => `<div class="card ovbox" data-single="${sg ? 1 : 0}"><h2>${sg ? "Single game" : "Multi-game"}: running profit <span class="small mute">${x} team${x > 1 ? "s" : ""} per contest · $15 and $2 · ${period}</span></h2><div class="ov mute small">Loading…</div></div>`).join("");
-    $("results").innerHTML = progsShown.map((sg) => insights(r, x, size, sg)).join("") + overview + html
+    $("results").innerHTML = progsShown.map((sg) => insights(r, x, size, sg)).join("") + html
       + `<details class="card" style="margin-top:14px"><summary><b>More detail</b> <span class="small mute">best combo by slate size, the where-to-play rule, accuracy, slates graded</span></summary>${detail}</details>`;
     // one chart per programme: props calibrated, the even split and Drop Coverage alone,
     // both fees summed night by night
