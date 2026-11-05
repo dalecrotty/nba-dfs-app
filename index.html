@@ -124,6 +124,8 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
         <label class="chk"><input id="usestacks" type="checkbox"> Game stacks</label>
         <label class="chk" title="On a stud night: every team holds 2+ of the 4 studs and 3+ of the 5 best values (FINDINGS F43, F46). Other nights: the normal build."><input id="studmode" type="checkbox"> Stud method</label>
         <button id="studset" title="Props calibrated, 10 teams, differing by 3, Stud method on">Stud method setup</button>
+        <label class="chk" title="No player in more than this many of the teams (blank = no limit). Locked players are not capped.">Max teams per player <input id="maxexp" type="number" min="1" max="50" placeholder="any" style="width:60px"></label>
+        <button id="rawset" title="Even thirds, bookmaker props raw, 10 teams, differing by 3, no player in more than 8 (FINDINGS F34, F53)">Raw props + 8/10 setup</button>
       </div>
       <p id="studline" class="small" style="margin:6px 0 0"></p>
       <p id="markline" class="small mute" style="margin:6px 0 0"></p>
@@ -703,10 +705,14 @@ $("build").onclick = async () => {
       if (plan.studs.length < 2 || plan.core.length < 3) throw new Error("stud night, but too few studs or value players have a projection: check the Value tab");
       base.require = [{ ids: new Set(plan.studs.map((p) => p.i)), k: 2 }, { ids: new Set(plan.core.map((p) => p.i)), k: 3 }];
     }
+    const maxExp = Math.max(0, Math.round(+$("maxexp").value || 0)) || null;
     const lus = [];
     for (let k = 0; k < N; k++) {
       const lockNow = lockAs.filter(([i]) => (used[i] || 0) < markCount(i));                 // in his first `count` teams
       const banNow = new Set([...banned].filter((i) => (used[i] || 0) >= N - markCount(i)));   // out of `count` teams
+      // the exposure cap (owner, 5 Nov 2026: "introduce raw props & 8/10 into the build"):
+      // a player already in maxExp teams sits out the rest; locked players aren't capped
+      if (maxExp) for (const [i, c] of Object.entries(used)) if (c >= maxExp && S.marks[+i] !== "lock") banNow.add(+i);
       const avoid = lus.map((lu) => new Set(lu.map((x) => x.i)));
       let lu = window.Lineup.solveOne(h, pool, rules, { ...base, locked: lockNow, banned: banNow, avoid });
       if (!lu && (base.maxGames || base.games)) lu = window.Lineup.solveOne(h, pool, rules, { ...base, maxGames: null, games: null, locked: lockNow, banned: banNow, avoid });   // the stack can't hold: drop it
@@ -714,7 +720,7 @@ $("build").onclick = async () => {
       lus.push(lu); for (const z of lu) used[z.i] = (used[z.i] || 0) + 1;
     }
     if (!lus.length) throw new Error(base.require ? "no legal lineup with the stud method's studs and value core: loosen the locks or excludes" : "no legal lineup: loosen the locks, or allow more games in the stack");
-    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), mark_counts: Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c])), stacks,
+    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), mark_counts: Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c])), stacks, max_exposure: maxExp,
       stud: plan ? { night: !!plan.close, game: plan.top ? `${plan.top.away}@${plan.top.home}` : null, total: plan.top ? plan.top.btotal : null, spread: plan.top ? plan.top.spread : null,
                      studs: plan.close ? plan.studs.map((p) => p.ds_id) : [], core: plan.close ? plan.core.map((p) => p.ds_id) : [] } : null };
     renderLineups(pool);
@@ -729,6 +735,10 @@ function renderStudLine() {
   el.innerHTML = studText(studPlan(), true);
 }
 $("studmode").onchange = renderStudLine;
+$("rawset").onclick = () => {
+  setMix(33, 33, 33); $("propsmode").value = "raw"; $("nlu").value = 10; $("mindiff").value = 3; $("maxexp").value = 8; $("studmode").checked = false;
+  remix(); renderMarks(); renderStudLine();
+};
 $("studset").onclick = () => {
   setMix(33, 33, 33); $("propsmode").value = "cal"; $("nlu").value = 10; $("mindiff").value = 3; $("studmode").checked = true;
   remix(); renderMarks(); renderStudLine();
