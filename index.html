@@ -1348,11 +1348,14 @@ $("swapcheck").onclick = async () => {
     : `<p class="ok">No swap worth 5+ points per team. Leave the teams as they are.</p>`;
   const stuck = [...new Set(r.lineups.flatMap((lu) => lu.map((z) => z.i)))].filter((i) => outNow.has(i));
   if (stuck.length) $("swaplist").innerHTML += `<p class="warn">Still in and out tonight (no legal bulk swap covers every team): ${stuck.map((i) => by.get(i).name).join(", ")}</p>`;
-  // replace any one player by hand (owner, 3 Nov 2026): every legal swap for him, best first
-  const held = [...new Set(lineups.flatMap((lu) => lu.map((z) => z.i)))].filter((i) => by.get(i))
+  // replace any one player by hand (owner, 3 Nov 2026): every legal swap for him, best first.
+  // A player whose game has started is left off the list (owner, 6 Nov 2026): DraftStars
+  // won't swap him, and neither can anyone whose game has started come in.
+  const held = [...new Set(lineups.flatMap((lu) => lu.map((z) => z.i)))].filter((i) => by.get(i) && !started.has(i))
     .sort((a, b) => (outNow.has(b) - outNow.has(a)) || (by.get(a).name > by.get(b).name ? 1 : -1));
+  const nStarted = [...new Set(lineups.flatMap((lu) => lu.map((z) => z.i)))].filter((i) => by.get(i) && started.has(i)).length;
   const nIn = (i) => lineups.filter((lu) => lu.some((z) => z.i === i)).length;
-  $("swaplist").innerHTML += `<div class="row" style="margin-top:10px"><b>Replace a player:</b> <select id="replx" class="grow"><option value="">choose a player in your teams…</option>${held.map((i) => `<option value="${i}">${by.get(i).name}${outNow.has(i) ? " (OUT)" : ""}${started.has(i) ? " (game started)" : ""} · $${(by.get(i).salary / 1000).toFixed(1)}k · in ${nIn(i)} team(s)</option>`).join("")}</select></div><div id="repllist"></div>`;
+  $("swaplist").innerHTML += `<div class="row" style="margin-top:10px"><b>Replace a player:</b> <select id="replx" class="grow"><option value="">${held.length ? "choose a player in your teams…" : "every player in your teams has tipped off"}</option>${held.map((i) => `<option value="${i}">${by.get(i).name}${outNow.has(i) ? " (OUT)" : ""} · $${(by.get(i).salary / 1000).toFixed(1)}k · in ${nIn(i)} team(s)</option>`).join("")}</select>${nStarted ? `<span class="small mute">${nStarted} already playing, not listed</span>` : ""}</div><div id="repllist"></div>`;
   $("replx").onchange = () => {
     const x = +$("replx").value; if (!$("replx").value) { $("repllist").innerHTML = ""; return; }
     if (started.has(x)) { $("repllist").innerHTML = `<p class="warn">${by.get(x).name}'s game has started: DraftStars won't swap him now.</p>`; return; }
