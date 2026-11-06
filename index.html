@@ -1045,7 +1045,9 @@ async function loadMeasure() {
         propscal_fav: "props, calibrated; captain = the favourite's star", even_fav: "even split; captain = the favourite's star",
         // amendment 16 (4 Nov 2026): the stud stack
         studs: "stud stack: 2 of the 4 dearest from the top-total game when it's close (spread under 4.5); props, calibrated otherwise",
-        studcore: "stud method: the stud stack + 3 of the slate's 5 best values in every team on stud nights; props, calibrated otherwise" };
+        studcore: "stud method: the stud stack + 3 of the slate's 5 best values in every team on stud nights; props, calibrated otherwise",
+        // amendment 16v (6 Nov 2026): the Raw props + 8/10 setup
+        props8: "raw props, no player in more than 8 of 10 teams (the Raw props + 8/10 setup)" };
       const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === "props" || m.mix === "props50" || m.mix === "propscal" || SPREAD_TAGS[m.mix] || m.mix === curMix || m.wins > 0 || m.top10 > 0;
       const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
       const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === "fitted" ? " <span class='mute small'>most accurate on earlier slates</span>" : "") + (m.mix === "props" ? " <span class='mute small'>bookmaker props where priced, else even split</span>" : "") + (m.mix === "props50" ? " <span class='mute small'>half props, half even split</span>" : "") + (m.mix === "propscal" ? " <span class='mute small'>props, unpriced players scaled to the props</span>" : "") + (SPREAD_TAGS[m.mix] ? ` <span class='mute small'>${SPREAD_TAGS[m.mix]}</span>` : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");
@@ -1083,7 +1085,7 @@ async function loadMeasure() {
     });
     document.querySelectorAll(".ovbox").forEach(async (box) => {
       try {
-        const series = await Promise.all(OV.filter(([mix]) => box.dataset.single === "0" || !["studs", "studcore"].includes(mix)).map(async ([mix, label, color]) => {
+        const series = await Promise.all(OV.filter(([mix]) => box.dataset.single === "0" || !["studs", "studcore", "props8"].includes(mix)).map(async ([mix, label, color]) => {
           const by = {};
           for (const fee of [15, 2]) {
             const qs = new URLSearchParams({ mix, k: String(x), single: box.dataset.single, fee: String(fee), size });
