@@ -537,6 +537,9 @@ function isOut(p) { return p.status && /out|inj|susp|ir\b/i.test(String(p.status
 // out), on props calibrated; the solver picks which, and fills the rest. Other nights: the
 // normal props-calibrated build. Numbers are props calibrated whatever the sliders say.
 const STUD_SPREAD = 4.5, CORE_N = 5, CORE_MIN = 15;
+// how much of the slate the books have priced: players $8k+ with a line, out of all $8k+
+// (owner, 9 Nov 2026); a build keeps it, the Swaps tab compares it with now
+function propsCover() { const big = (S.pool || []).filter((p) => p.salary >= 8000); return { priced: big.filter((p) => p.pr != null).length, big: big.length, at: new Date().toISOString() }; }
 function propscalOf(p) {
   const w = { dc: 1 / 3, bm: 1 / 3, rw: 1 / 3 };
   if (p.pr != null && !prStale(p)) return p.pr;
@@ -750,7 +753,7 @@ $("build").onclick = async () => {
       lus.push(lu); for (const z of lu) used[z.i] = (used[z.i] || 0) + 1;
     }
     if (!lus.length) throw new Error(base.require ? "no legal lineup with the stud method's studs and value core: loosen the locks or excludes" : "no legal lineup: loosen the locks, or allow more games in the stack");
-    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), mark_counts: Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c])), stacks, max_exposure: maxExp,
+    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), mark_counts: Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c])), stacks, max_exposure: maxExp, props_cover: propsCover(),
       stud: plan ? { night: !!plan.close, game: plan.top ? `${plan.top.away}@${plan.top.home}` : null, total: plan.top ? plan.top.btotal : null, spread: plan.top ? plan.top.spread : null,
                      studs: plan.close ? plan.studs.map((p) => p.ds_id) : [], core: plan.close ? plan.core.map((p) => p.ds_id) : [] } : null };
     renderLineups(pool);
@@ -1367,9 +1370,15 @@ $("swapcheck").onclick = async () => {
   const by = new Map(S.pool.map((p) => [p.i, p]));
   const pm = new Map(pool.map((p) => [p.i, p]));
   const tag = (i) => `${by.get(i).name} <span class="mute">${by.get(i).posList.join("/")} · $${(by.get(i).salary / 1000).toFixed(1)}k · ${outNow.has(i) ? "OUT" : (pm.get(i)?.mean || 0).toFixed(1)}</span>`;
-  $("swaplist").innerHTML = r.swaps.length
+  // the later games' lines land an hour or two before they tip (owner, 9 Nov 2026): say what
+  // the books have priced now against when the teams were built, so a swap check runs on them
+  const cv = propsCover(), was = b.settings?.props_cover;
+  const heldSet = new Set(lineups.flatMap((lu) => lu.map((z) => z.i)));
+  const heldPriced = [...heldSet].filter((i) => by.get(i)?.pr != null).length;
+  const coverLine = cv.big ? `<p class="small ${cv.priced / cv.big < 0.5 ? "warn" : "mute"}">Lines now: ${cv.priced} of ${cv.big} players $8k+ priced${was && was.big ? ` (${was.priced} of ${was.big} when these teams were built)` : ""}; ${heldPriced} of the ${heldSet.size} players in your teams have a line.${cv.priced / cv.big < 0.5 ? " Under half the slate is priced: the later games' lines usually land an hour or two before they tip, so check again then." : ""}</p>` : "";
+  $("swaplist").innerHTML = coverLine + (r.swaps.length
     ? r.swaps.map((s) => `<div class="lu"><b>SWAP</b> ${tag(s.x)} <b>→</b> ${tag(s.y)} · ${outNow.has(s.x) ? "out tonight" : "+" + s.step.toFixed(1) + " pts each"} · ${s.touched.length} team(s)</div>`).join("")
-    : `<p class="ok">No swap worth 5+ points per team. Leave the teams as they are.</p>`;
+    : `<p class="ok">No swap worth 5+ points per team. Leave the teams as they are.</p>`);
   const stuck = [...new Set(r.lineups.flatMap((lu) => lu.map((z) => z.i)))].filter((i) => outNow.has(i));
   if (stuck.length) $("swaplist").innerHTML += `<p class="warn">Still in and out tonight (no legal bulk swap covers every team): ${stuck.map((i) => by.get(i).name).join(", ")}</p>`;
   // replace any one player by hand (owner, 3 Nov 2026): every legal swap for him, best first.
