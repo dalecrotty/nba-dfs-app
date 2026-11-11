@@ -8,3 +8,5 @@ sign-in (Supabase Auth, email allowlist); every number comes from the
 `index.html` to publish.
 
 - 11 Nov 2026: Build tab, **Slate-size model setup** (the 2-3 / 4-6 / 7+ game models fitted to 20 Oct-10 Nov; Measurement `fitsize`).
+
+Single game: "Single game: half props setup" on the Build tab (half props, 5 teams; the line under it says whether the game is close).
