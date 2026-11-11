@@ -6,3 +6,5 @@ sign-in (Supabase Auth, email allowlist); every number comes from the
 `dfs` Edge Function in the NBA Supabase project. Source of truth:
 `app/page.html` in dalecrotty/nba-dfs-personal; copy it here as
 `index.html` to publish.
+
+- 11 Nov 2026: Build tab, **Slate-size model setup** (the 2-3 / 4-6 / 7+ game models fitted to 20 Oct-10 Nov; Measurement `fitsize`).
