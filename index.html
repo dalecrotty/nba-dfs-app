@@ -142,6 +142,12 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
         <label class="chk" title="No player in more than this many of the teams (blank = no limit). Locked players are not capped.">Max teams per player <input id="maxexp" type="number" min="1" max="50" placeholder="any" style="width:60px"></label>
         <button id="rawset" title="Even thirds, bookmaker props raw, 10 teams, differing by 3, no player in more than 8 (FINDINGS F34, F53)">Raw props + 8/10 setup</button>
       </div>
+      <div class="row" style="margin-top:6px">
+        <label class="chk" title="The clean-sheet models fitted to this season's $15 multi-game contests, one per slate size (FINDINGS F74-F77). Its own numbers and team rules replace the sliders, differ by, max per team and max teams per player while it is ticked."><input id="fitmode" type="checkbox"> Slate-size model</label>
+        <select id="fitpick" title="Which model: the one for the slate's size, or a size of your choosing"><option value="auto">for this slate's size</option><option value="fit7">7+ games model</option><option value="fit46">4-6 games model</option><option value="fit23">2-3 games model</option></select>
+        <button id="fitset" title="Ticks Slate-size model, 10 teams, and turns the stud method off">Slate-size model setup</button>
+      </div>
+      <p id="fitline" class="small" style="margin:6px 0 0"></p>
       <p id="studline" class="small" style="margin:6px 0 0"></p>
       <p id="markline" class="small mute" style="margin:6px 0 0"></p>
       <div id="stacks" class="hide small">
@@ -680,7 +686,7 @@ function renderPlayers() {
     renderPlayers();
   });
   renderMarks();
-  renderStudLine();
+  renderStudLine(); if (typeof renderFitLine === "function") renderFitLine();
 }
 // the Build tab's locks and excludes, each for a number of the teams (owner, 3 Nov 2026:
 // "select how many teams we want that player locked or excluded from"); no number = every team
@@ -727,18 +733,21 @@ $("build").onclick = async () => {
       const games = [...document.querySelectorAll(".stk:checked")].map((el) => el.dataset.g);
       stacks = { maxGames: Math.max(1, +$("nstack").value || 2), games };
     }
-    const pool = solverPool();
+    const fit = $("fitmode").checked ? fitPlan() : null;
+    const pool = fit ? solverPool().map((p) => ({ ...p, mean: fit.num.get(p.i) || 0 })) : solverPool();
+    if (fit) { rules.maxPerTeam = Math.min(rules.maxPerTeam, fit.c.mpt || 99); for (const i of fit.ban) banned.add(i); }
     if (!pool.some((p) => p.mean > 0)) throw new Error("no player has a projection in this mix: move up the slider of a source that shows a time under 'Numbers as of'");
     const t0 = Date.now();
     const N = nTeams(), used = {};
     const base = { minDiff: +$("mindiff").value || 1, maxGames: stacks ? stacks.maxGames : null, games: stacks && stacks.games.length ? new Set(stacks.games) : null };
     const lockAs = locked.map(([i, s]) => [i, s === "ANY" ? "ANY" : (pool.find((p) => p.i === i)?.pos[0] || s)]);
-    const plan = $("studmode").checked ? studPlan() : null;
+    const plan = $("studmode").checked && !fit ? studPlan() : null;
+    if (fit) { base.minDiff = fit.c.d; base.require = fit.require.length ? fit.require : undefined; base.minFromGame = fit.c.g || null; }
     if (plan && plan.close) {
       if (plan.studs.length < 2 || plan.core.length < 3) throw new Error("stud night, but too few studs or value players have a projection: check the Value tab");
       base.require = [{ ids: new Set(plan.studs.map((p) => p.i)), k: 2 }, { ids: new Set(plan.core.map((p) => p.i)), k: 3 }];
     }
-    const maxExp = Math.max(0, Math.round(+$("maxexp").value || 0)) || null;
+    const maxExp = fit ? fit.c.cap || null : Math.max(0, Math.round(+$("maxexp").value || 0)) || null;
     const lus = [];
     for (let k = 0; k < N; k++) {
       const lockNow = lockAs.filter(([i]) => (used[i] || 0) < markCount(i));                 // in his first `count` teams
@@ -749,6 +758,9 @@ $("build").onclick = async () => {
       const avoid = lus.map((lu) => new Set(lu.map((x) => x.i)));
       let lu = window.Lineup.solveOne(h, pool, rules, { ...base, locked: lockNow, banned: banNow, avoid });
       if (!lu && (base.maxGames || base.games)) lu = window.Lineup.solveOne(h, pool, rules, { ...base, maxGames: null, games: null, locked: lockNow, banned: banNow, avoid });   // the stack can't hold: drop it
+      // the slate-size model, as Measurement builds it: the game rule goes first, then the required sets
+      if (!lu && fit && base.minFromGame) lu = window.Lineup.solveOne(h, pool, rules, { ...base, minFromGame: null, locked: lockNow, banned: banNow, avoid });
+      if (!lu && fit && base.require) lu = window.Lineup.solveOne(h, pool, rules, { ...base, minFromGame: null, require: undefined, locked: lockNow, banned: banNow, avoid });
       if (!lu) break;
       lus.push(lu); for (const z of lu) used[z.i] = (used[z.i] || 0) + 1;
     }
@@ -757,7 +769,8 @@ $("build").onclick = async () => {
       stud: plan ? { night: !!plan.close, game: plan.top ? `${plan.top.away}@${plan.top.home}` : null, total: plan.top ? plan.top.btotal : null, spread: plan.top ? plan.top.spread : null,
                      studs: plan.close ? plan.studs.map((p) => p.ds_id) : [], core: plan.close ? plan.core.map((p) => p.ds_id) : [] } : null };
     renderLineups(pool);
-    $("buildmsg").textContent = `${lus.length} lineup(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s${plan ? (plan.close ? " · stud method: stud night" : " · stud method: not a stud night, normal build") : ""}`;
+    if (fit) S.settings.fit = { model: fit.model, cfg: fit.c };
+    $("buildmsg").textContent = `${lus.length} lineup(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s${plan ? (plan.close ? " · stud method: stud night" : " · stud method: not a stud night, normal build") : ""}${fit ? ` · ${FIT_NAME[fit.model]}` : ""}`;
     $("result").classList.remove("hide"); $("result").scrollIntoView({ behavior: "smooth" });
   } catch (e) { $("buildmsg").innerHTML = `<span class="bad">${e.message}</span>`; }
   $("build").disabled = false;
@@ -775,6 +788,86 @@ $("rawset").onclick = () => {
 $("studset").onclick = () => {
   setMix(33, 33, 33); $("propsmode").value = "cal"; $("nlu").value = 10; $("mindiff").value = 3; $("studmode").checked = true;
   remix(); renderMarks(); renderStudLine();
+};
+// ── the slate-size models (owner, 11 Nov 2026: "they should all be added as measurement and
+// builds"; FINDINGS F74-F77, PREREG_sources amendments 28-32; Measurement fit7 / fit46 / fit23 /
+// fitsize, research/mixgrade.py FIT, the same settings) ──
+const FIT_BASE = { a: 1, L: 0, pos: 0, s: 0, d: 3, cap: 0, m: 0, close: 1, c: 0, noC: 0, paySF: 0, mpt: 0, g: 0 };
+const FIT = {
+  fit7: { ...FIT_BASE, L: 0.05, pos: 1, d: 2, paySF: 1, mpt: 3 },
+  fit46: { ...FIT_BASE, a: 0.5, L: 0.05, s: 0.04, m: 2, c: 3, mpt: 3, g: 5 },
+  fit23: { ...FIT_BASE, a: 0.5, s: 0.08, cap: 6, m: 3, close: 0, c: 3, noC: 1, paySF: 1, mpt: 3, g: 5 },
+};
+const FIT_NAME = { fit7: "7+ games model", fit46: "4-6 games model", fit23: "2-3 games model" };
+function fitChoice() {
+  const pick = $("fitpick") ? $("fitpick").value : "auto";
+  if (pick !== "auto") return pick;
+  const g = (S.slate && S.slate.games || []).length;
+  return g <= 3 ? "fit23" : g <= 6 ? "fit46" : "fit7";
+}
+function fitNum(p, c) {                      // the model's number (mixgrade.fit_means)
+  const w3 = { dc: 1 / 3, bm: 1 / 3, rw: 1 / 3 };
+  const m = baseMix(p, w3), fill = m == null ? null : m * propsK(w3);
+  const pr = p.pr != null && !prStale(p) ? p.pr : null;
+  if (pr === 0) return 0;                    // the books at 0 = out (sql/0050), whatever the share
+  let n = pr == null ? fill : fill == null ? pr : c.a * pr + (1 - c.a) * fill;
+  if (n == null || !p.salary) return null;
+  const pos = (p.posList || [])[0];
+  if (n >= 15 && n / (p.salary / 1000) / 3 >= 1) n *= 1 + c.L;
+  if (c.pos && p.salary < 8000) n *= pos === "C" ? 1.08 : pos === "PF" ? 0.93 : 1;
+  if (p.salary >= 15000) n *= 1 + c.s;
+  return n;
+}
+function fitPlan() {
+  if (!S.slate || S.slate.rules.captain) return null;
+  const model = fitChoice(), c = FIT[model];
+  const out = (p) => fullBan(p.i) || (isOut(p) && S.marks[p.i] !== "lock");
+  const num = new Map(S.pool.map((p) => [p.i, out(p) ? 0 : fitNum(p, c) || 0]));
+  const pos = (p) => (p.posList || [])[0];
+  const ban = new Set(c.noC ? S.pool.filter((p) => pos(p) === "C" && p.salary >= 15000 && S.marks[p.i] !== "lock").map((p) => p.i) : []);
+  const require = [], notes = [];
+  const priced = (S.slate.games || []).filter((g) => g.btotal != null && g.spread != null);
+  const top = [...priced].sort((a, b) => b.btotal - a.btotal || Math.abs(a.spread) - Math.abs(b.spread))[0];
+  let prem = [];
+  if (c.m && top && (!c.close || Math.abs(top.spread) < STUD_SPREAD)) {
+    for (const t of [...new Set(S.pool.filter((p) => p.game === top.id).map((p) => p.team))])
+      prem.push(...S.pool.filter((p) => p.game === top.id && p.team === t && p.salary && num.get(p.i) > 0 && !ban.has(p.i)).sort((a, b) => b.salary - a.salary).slice(0, 2));
+    if (prem.length >= c.m) { require.push({ ids: new Set(prem.map((p) => p.i)), k: c.m }); notes.push(`${c.m} of ${top.away} @ ${top.home}'s four dearest (${prem.map((p) => p.name).join(", ")})`); }
+    else prem = [];
+  } else if (c.m) notes.push(top ? `the top-total game (${top.away} @ ${top.home}) isn't close, so no studs forced` : "no game lines yet, so no studs forced");
+  if (c.c) {
+    const ps = new Set(prem.map((p) => p.i));
+    const core = S.pool.filter((p) => !ps.has(p.i) && !ban.has(p.i) && p.salary && num.get(p.i) >= CORE_MIN).sort((a, b) => num.get(b.i) / b.salary - num.get(a.i) / a.salary).slice(0, CORE_N);
+    if (core.length >= c.c) { require.push({ ids: new Set(core.map((p) => p.i)), k: c.c }); notes.push(`${c.c} of the five best values (${core.map((p) => p.name).join(", ")})`); }
+  }
+  if (c.paySF) {
+    const sf = S.pool.filter((p) => pos(p) === "SF" && p.salary >= 15000 && num.get(p.i) > 0 && !ban.has(p.i));
+    if (sf.length) { require.push({ ids: new Set(sf.map((p) => p.i)), k: 1 }); notes.push(`a $15k+ small forward (${sf.map((p) => p.name).join(", ")})`); }
+    else notes.push("no $15k+ small forward on the slate, so that rule is off");
+  }
+  if (c.noC) notes.push(`no $15k+ centre${ban.size ? ` (${S.pool.filter((p) => ban.has(p.i)).map((p) => p.name).join(", ")} left out)` : ""}`);
+  if (c.g) notes.push(`${c.g} players from one game`);
+  const numbers = [c.a < 1 ? `half bookmaker props, half the three sources` : `bookmaker props`, c.L ? `players at 100%+ value up ${Math.round(100 * c.L)}%` : null,
+    c.pos ? "centres under $8k up 8%, power forwards under $8k down 7%" : null, c.s ? `players $15k+ up ${Math.round(100 * c.s)}%` : null].filter(Boolean);
+  const teams = [`differ by ${c.d}`, c.mpt ? `at most ${c.mpt} from one NBA team` : null, c.cap ? `no player in more than ${c.cap} teams` : null].filter(Boolean);
+  return { model, c, num, ban, require, notes, numbers, teams };
+}
+function renderFitLine() {
+  const el = $("fitline"); if (!el) return;
+  if (!$("fitmode").checked) { el.innerHTML = ""; return; }
+  const f = fitPlan();
+  if (!f) { el.innerHTML = `<span class="warn">The slate-size models are for multi-game contests.</span>`; return; }
+  const g = (S.slate.games || []).length, own = f.model === (g <= 3 ? "fit23" : g <= 6 ? "fit46" : "fit7");
+  el.innerHTML = `<b>${FIT_NAME[f.model]}</b> (${g}-game slate${own ? "" : `; <span class="warn">this model was fitted on ${FIT_NAME[f.model].replace(" model", "")} slates</span>`}). Numbers: ${f.numbers.join("; ")}. Teams: ${f.teams.join("; ")}${f.notes.length ? "; " + f.notes.join("; ") : ""}.`
+    + `<br><span class="mute">Fitted to 20 Oct-10 Nov's $15 contests, so its record there is hindsight; Measurement grades it from 11 Nov (fit7, fit46, fit23, fitsize). Leaving one slate out, only the 7+ model kept a return.</span>`;
+}
+$("fitmode").onchange = () => { if ($("fitmode").checked) $("studmode").checked = false; renderFitLine(); renderStudLine(); };
+$("fitpick").onchange = renderFitLine;
+$("fitset").onclick = () => {
+  setMix(33, 33, 33); $("propsmode").value = "cal"; $("nlu").value = 10; $("studmode").checked = false; $("fitmode").checked = true;
+  const c = FIT[fitChoice()];
+  $("mindiff").value = c.d; $("maxteam").value = c.mpt || 5; $("maxexp").value = c.cap || "";
+  remix(); renderMarks(); renderStudLine(); renderFitLine();
 };
 function lineupProj(lu, pool) { const by = new Map(pool.map((p) => [p.i, p])); return lu.reduce((a, z) => a + (z.slot === "CAP" ? 1.5 : 1) * (by.get(z.i)?.mean || 0), 0); }
 function renderLineups(pool) {
@@ -1072,7 +1165,10 @@ async function loadMeasure() {
         studs: "stud stack: 2 of the 4 dearest from the top-total game when it's close (spread under 4.5); props, calibrated otherwise",
         studcore: "stud method: the stud stack + 3 of the slate's 5 best values in every team on stud nights; props, calibrated otherwise",
         // amendment 16v (6 Nov 2026): the Raw props + 8/10 setup
-        props8: "raw props, no player in more than 8 of 10 teams (the Raw props + 8/10 setup)" };
+        props8: "raw props, no player in more than 8 of 10 teams (the Raw props + 8/10 setup)",
+        // amendment 32 (11 Nov 2026): the slate-size models, fitted to 20 Oct-10 Nov (hindsight there)
+        fit7: "7+ games model (fitted to 20 Oct-10 Nov)", fit46: "4-6 games model (fitted to 20 Oct-10 Nov)", fit23: "2-3 games model (fitted to 20 Oct-10 Nov)",
+        fitsize: "slate-size model: the model for the slate's size (fitted to 20 Oct-10 Nov)" };
       const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === "props" || m.mix === "props50" || m.mix === "propscal" || SPREAD_TAGS[m.mix] || m.mix === curMix || m.wins > 0 || m.top10 > 0;
       const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
       const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === "fitted" ? " <span class='mute small'>most accurate on earlier slates</span>" : "") + (m.mix === "props" ? " <span class='mute small'>bookmaker props where priced, else even split</span>" : "") + (m.mix === "props50" ? " <span class='mute small'>half props, half even split</span>" : "") + (m.mix === "propscal" ? " <span class='mute small'>props, unpriced players scaled to the props</span>" : "") + (SPREAD_TAGS[m.mix] ? ` <span class='mute small'>${SPREAD_TAGS[m.mix]}</span>` : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");

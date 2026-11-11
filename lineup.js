@@ -8,6 +8,8 @@
 // the games in `games`; nothing is forced from any game). `require`:
 // [{ids, k}] = at least k of these players in the lineup (the stud method,
 // owner 4 Nov 2026: 2 of the 4 studs and 3 of the 5 best values).
+// `minFromGame`: at least k players from ONE game, any game (the slate-size
+// models, owner 11 Nov 2026; FINDINGS F75-F76).
 //
 // pool: [{i, name, team, game, pos: ["PG","SG"], salary, mean}]
 // rules: {cap, slots: {PG:2,...}, maxPerTeam, captain, captainMult, captainSalaryMult}
@@ -18,7 +20,7 @@
   const SLOT_ORDER = ["PG", "SG", "SF", "PF", "C"];
 
   function lp(pool, rules, opts) {
-    const { locked = [], banned = new Set(), avoid = [], minDiff = 3, maxGames = null, games = null, maxPerTeam = null, require = [] } = opts || {};
+    const { locked = [], banned = new Set(), avoid = [], minDiff = 3, maxGames = null, games = null, maxPerTeam = null, require = [], minFromGame = null } = opts || {};
     const lockedBy = new Map(locked.map(([i, s]) => [i, s]));
     const vars = [];                        // {name, i, slot, w}
     const cap = rules.captain;
@@ -78,8 +80,22 @@
       }
       if (gameVars.length > maxGames) row(gameVars.join(" + "), "<=", maxGames);   // no more than maxGames games
     }
+    const fromVars = [];                     // h_g = 1 picks game g to give minFromGame+ players
+    if (minFromGame) {
+      const byGame = new Map();
+      for (const v of vars) { const g = info.get(v.i).game; (byGame.get(g) || byGame.set(g, []).get(g)).push(v); }
+      let n = 0;
+      for (const [, vs] of byGame) {
+        if (new Set(vs.map((v) => v.i)).size < minFromGame) continue;
+        const y = `h${n++}`;
+        fromVars.push(y);
+        row(vs.map((v) => v.name).join(" + ") + ` - ${minFromGame} ${y}`, ">=", 0);
+      }
+      if (!fromVars.length) return null;
+      row(fromVars.join(" + "), ">=", 1);
+    }
     L.push("Bounds");
-    for (const y of gameVars) L.push(` 0 <= ${y} <= 1`);
+    for (const y of gameVars.concat(fromVars)) L.push(` 0 <= ${y} <= 1`);
     for (const v of vars) {
       const lk = lockedBy.get(v.i);
       if (lk !== undefined) L.push(` ${v.name} = ${lk === v.slot || (cap && lk === "ANY" && v.slot === "FLEX") ? 1 : 0}`);
@@ -90,7 +106,7 @@
       L.splice(L.indexOf("Bounds"), 0, ` r${k++}: ${vs.map((v) => v.name).join(" + ")} = 1`);
       for (const v of vs) { const j = L.indexOf(` ${v.name} = ${v.slot === "FLEX" ? 1 : 0}`); if (j > 0) L[j] = ` 0 <= ${v.name} <= 1`; }
     }
-    L.push("General", " " + vars.map((v) => v.name).concat(gameVars).join(" "), "End");
+    L.push("General", " " + vars.map((v) => v.name).concat(gameVars, fromVars).join(" "), "End");
     return { text: L.join("\n"), vars };
   }
 
