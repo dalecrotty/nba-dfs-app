@@ -415,7 +415,7 @@ async function loadSlate(quiet, stay) {
     const share = big.length ? bigPr / big.length : 0;
     const cover = nPr ? ` · <span class="${share < 0.5 ? "warn" : share < 0.8 ? "" : "ok"}" title="players $8k and up with points, rebounds and assists lines">${bigPr} of ${big.length} players $8k+ priced (${Math.round(100 * share)}%)</span>${noLine.length ? ` · <span class="warn">no lines yet: ${noLine.join(", ")}</span>` : ""}` : "";
     $("ages").innerHTML = `${line("DC", "drop_coverage")}<br>${line("BM", "basketball_monster")}<br>${line("RW", "rotowire")}<br>Props: ${nPr ? `${nPr} players priced by the books, lines from ${prAt} (${fmtAge(s.props_at)})` : "no lines yet for this slate"}${cover}`
-      + (nSt ? ` · <span class="warn">⚠ ${nSt} out of date: the other sources have moved since</span>` : "")
+      + (nSt ? ` · <span class="warn">⚠ ${nSt} out of date: the other sources have moved since (${S.pool.filter(prStale).map((p) => { const m = p.prs, sg = (x) => (x == null ? "–" : (x > 0 ? "+" : "") + x); return `${p.name} (props ${(+p.pr).toFixed(1)}): DC ${sg(m.dc)}, BM ${sg(m.bm)}, RW ${sg(m.rw)}`; }).join("; ")})</span>` : "")
       + (nPr && share < 0.5 ? `<br><span class="warn">Under half the slate is priced: the props builds run on the sliders' mix for the unpriced games. The later games' lines usually land an hour or two before they tip; build late, or lean on the even split for those games.</span>` : "")
       + (s.odds_credits ? ` · <span class="${s.odds_credits.credits < 300 ? "bad" : "mute"}">odds credits: ${s.odds_credits.credits} left${s.odds_credits.credits < 300 ? " (under a day's pulls: add a key or a paid plan)" : ""}</span>` : "")
       + ` <button class="prref">Refresh props</button> <span class="prmsg small"></span>`;
