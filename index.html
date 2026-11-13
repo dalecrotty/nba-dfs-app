@@ -144,7 +144,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
       </div>
       <div class="row" style="margin-top:6px">
         <label class="chk" title="The clean-sheet models fitted to this season's $15 multi-game contests, one per slate size (FINDINGS F74-F77). Its own numbers and team rules replace the sliders, differ by, max per team and max teams per player while it is ticked."><input id="fitmode" type="checkbox"> Slate-size model</label>
-        <select id="fitpick" title="Which model: the one for the slate's size, or a size of your choosing"><option value="auto">for this slate's size</option><option value="fit7">7+ games model</option><option value="fit46b">4-6 games model</option><option value="fit23">2-3 games model</option></select>
+        <select id="fitpick" title="Which model: the one for the slate's size, or a size of your choosing"><option value="auto">for this slate's size</option><option value="fit7b">7+ games model</option><option value="fit7">7+ games model, first version</option><option value="fit46b">4-6 games model</option><option value="fit23">2-3 games model</option></select>
         <button id="fitset" title="Ticks Slate-size model, 10 teams, and turns the stud method off">Slate-size model setup</button>
         <button id="sgset" title="Single game: even thirds, bookmaker props half, 5 teams, differing by 3 (FINDINGS F78)">Single game: half props setup</button>
       </div>
@@ -802,20 +802,25 @@ $("studset").onclick = () => {
 // ── the slate-size models (owner, 11 Nov 2026: "they should all be added as measurement and
 // builds"; FINDINGS F74-F77, PREREG_sources amendments 28-32; Measurement fit7 / fit46 / fit23 /
 // fitsize, research/mixgrade.py FIT, the same settings) ──
-const FIT_BASE = { a: 1, L: 0, pos: 0, s: 0, d: 3, cap: 0, m: 0, close: 1, c: 0, noC: 0, paySF: 0, mpt: 0, g: 0 };
+const FIT_BASE = { a: 1, L: 0, pos: 0, s: 0, d: 3, cap: 0, m: 0, close: 1, c: 0, noC: 0, paySF: 0, mpt: 0, g: 0, u: 0 };
 const FIT = {
   fit7: { ...FIT_BASE, L: 0.05, pos: 1, d: 2, paySF: 1, mpt: 3 },
+  // the 7+ game model, second version (owner, 14 Nov 2026: "Yes do that - can we just rename the
+  // current model and continue to measure though?"; F80, amendments 37-38): the books pushed half
+  // the props-sources gap past the sources (a 1.5), plus half the three sources' own gap (u)
+  fit7b: { ...FIT_BASE, a: 1.5, u: 0.5, pos: 1, s: -0.04, cap: 6, mpt: 3 },
   // the 4-6 game model, second version (owner, 14 Nov 2026: "Replace under new name"; F79, amendments
   // 35-36): the first (fit46) came last of the builds on its first night and is retired
   fit46b: { ...FIT_BASE, a: 0.5, pos: 1, cap: 8, m: 1, g: 4 },
   fit23: { ...FIT_BASE, a: 0.5, s: 0.08, cap: 6, m: 3, close: 0, c: 3, noC: 1, paySF: 1, mpt: 3, g: 5 },
 };
-const FIT_NAME = { fit7: "7+ games model", fit46b: "4-6 games model", fit23: "2-3 games model" };
+const FIT_NAME = { fit7b: "7+ games model", fit7: "7+ games model, first version", fit46b: "4-6 games model", fit23: "2-3 games model" };
+const FIT_SIZE = { fit7b: "7+ games", fit7: "7+ games", fit46b: "4-6 games", fit23: "2-3 games" };
 function fitChoice() {
   const pick = $("fitpick") ? $("fitpick").value : "auto";
   if (pick !== "auto") return pick;
   const g = (S.slate && S.slate.games || []).length;
-  return g <= 3 ? "fit23" : g <= 6 ? "fit46b" : "fit7";
+  return g <= 3 ? "fit23" : g <= 6 ? "fit46b" : "fit7b";
 }
 function fitNum(p, c) {                      // the model's number (mixgrade.fit_means)
   const w3 = { dc: 1 / 3, bm: 1 / 3, rw: 1 / 3 };
@@ -824,6 +829,7 @@ function fitNum(p, c) {                      // the model's number (mixgrade.fit
   if (pr === 0) return 0;                    // the books at 0 = out (sql/0050), whatever the share
   let n = pr == null ? fill : fill == null ? pr : c.a * pr + (1 - c.a) * fill;
   if (n == null || !p.salary) return null;
+  if (c.u) { const v = [p.dc, p.bm, p.rw].filter((x) => x != null); if (v.length) n += c.u * (Math.max(...v) - Math.min(...v)); }
   const pos = (p.posList || [])[0];
   if (n >= 15 && n / (p.salary / 1000) / 3 >= 1) n *= 1 + c.L;
   if (c.pos && p.salary < 8000) n *= pos === "C" ? 1.08 : pos === "PF" ? 0.93 : 1;
@@ -859,8 +865,9 @@ function fitPlan() {
   }
   if (c.noC) notes.push(`no $15k+ centre${ban.size ? ` (${S.pool.filter((p) => ban.has(p.i)).map((p) => p.name).join(", ")} left out)` : ""}`);
   if (c.g) notes.push(`${c.g} players from one game`);
-  const numbers = [c.a < 1 ? `half bookmaker props, half the three sources` : `bookmaker props`, c.L ? `players at 100%+ value up ${Math.round(100 * c.L)}%` : null,
-    c.pos ? "centres under $8k up 8%, power forwards under $8k down 7%" : null, c.s ? `players $15k+ up ${Math.round(100 * c.s)}%` : null].filter(Boolean);
+  const numbers = [c.a > 1 ? `bookmaker props pushed half as far again past the three sources` : c.a < 1 ? `half bookmaker props, half the three sources` : `bookmaker props`,
+    c.u ? `plus half the gap between the highest and lowest source` : null, c.L ? `players at 100%+ value up ${Math.round(100 * c.L)}%` : null,
+    c.pos ? "centres under $8k up 8%, power forwards under $8k down 7%" : null, c.s ? `players $15k+ ${c.s > 0 ? "up" : "down"} ${Math.abs(Math.round(100 * c.s))}%` : null].filter(Boolean);
   const teams = [`differ by ${c.d}`, c.mpt ? `at most ${c.mpt} from one NBA team` : null, c.cap ? `no player in more than ${c.cap} teams` : null].filter(Boolean);
   return { model, c, num, ban, require, notes, numbers, teams };
 }
@@ -869,11 +876,13 @@ function renderFitLine() {
   if (!$("fitmode").checked) { el.innerHTML = ""; return; }
   const f = fitPlan();
   if (!f) { el.innerHTML = `<span class="warn">The slate-size models are for multi-game contests.</span>`; return; }
-  const g = (S.slate.games || []).length, own = f.model === (g <= 3 ? "fit23" : g <= 6 ? "fit46b" : "fit7");
-  el.innerHTML = `<b>${FIT_NAME[f.model]}</b> (${g}-game slate${own ? "" : `; <span class="warn">this model was fitted on ${FIT_NAME[f.model].replace(" model", "")} slates</span>`}). Numbers: ${f.numbers.join("; ")}. Teams: ${f.teams.join("; ")}${f.notes.length ? "; " + f.notes.join("; ") : ""}.`
+  const g = (S.slate.games || []).length, own = FIT_SIZE[f.model] === (g <= 3 ? "2-3 games" : g <= 6 ? "4-6 games" : "7+ games");
+  el.innerHTML = `<b>${FIT_NAME[f.model]}</b> (${g}-game slate${own ? "" : `; <span class="warn">this model was fitted on ${FIT_SIZE[f.model]} slates</span>`}). Numbers: ${f.numbers.join("; ")}. Teams: ${f.teams.join("; ")}${f.notes.length ? "; " + f.notes.join("; ") : ""}.`
     + `<br><span class="mute">${f.model === "fit46b"
       ? "Second version (14 Nov): the first came last on its first night and is retired. Fitted to 25 Oct-12 Nov's seven $15 contests at 10 teams, so its record there is hindsight; Measurement grades it from 13 Nov (fit46b). Most of its fitted profit is one night (12 Nov); expect a little better than props calibrated, not more."
-      : "Fitted to 20 Oct-10 Nov's $15 contests, so its record there is hindsight; Measurement grades it from 11 Nov (fit7, fit23, fitsize). Leaving one slate out, only the 7+ model kept a return."}</span>`;
+      : f.model === "fit7b"
+        ? "Second version (14 Nov): fitted to 21 Oct-11 Nov's eleven $15 contests at 10 teams, so its record there is hindsight; Measurement grades it from 13 Nov (fit7b). Most of its fitted profit is two October nights; the first version is still measured beside it."
+        : "Fitted to 20 Oct-10 Nov's $15 contests, so its record there is hindsight; Measurement grades it from 11 Nov (fit7, fit23, fitsize). Leaving one slate out, only the 7+ model kept a return."}</span>`;
 }
 $("fitmode").onchange = () => { if ($("fitmode").checked) $("studmode").checked = false; renderFitLine(); renderStudLine(); };
 $("fitpick").onchange = renderFitLine;
@@ -1201,7 +1210,7 @@ async function loadMeasure() {
         // amendment 16v (6 Nov 2026): the Raw props + 8/10 setup
         props8: "raw props, no player in more than 8 of 10 teams (the Raw props + 8/10 setup)",
         // amendment 32 (11 Nov 2026): the slate-size models, fitted to 20 Oct-10 Nov (hindsight there)
-        fit7: "7+ games model (fitted to 20 Oct-10 Nov)", fit46: "4-6 games model, first version (retired 13 Nov)", fit46b: "4-6 games model, second version (fitted to 25 Oct-12 Nov; graded from 13 Nov)", fit23: "2-3 games model (fitted to 20 Oct-10 Nov)",
+        fit7: "7+ games model, first version (fitted to 20 Oct-10 Nov)", fit7b: "7+ games model, second version (fitted to 21 Oct-11 Nov; graded from 13 Nov)", fit46: "4-6 games model, first version (retired 13 Nov)", fit46b: "4-6 games model, second version (fitted to 25 Oct-12 Nov; graded from 13 Nov)", fit23: "2-3 games model (fitted to 20 Oct-10 Nov)",
         fitsize: "slate-size model: the model for the slate's size (fitted to 20 Oct-10 Nov)",
         // amendment 34 (11 Nov 2026): single game, half props
         sghalf: "single game: half props, half the calibrated sources (fitted to 20 Oct-10 Nov)",
