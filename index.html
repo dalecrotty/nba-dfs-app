@@ -881,7 +881,7 @@ function renderFitLine() {
     + `<br><span class="mute">${f.model === "fit46b"
       ? "Second version (14 Nov): the first came last on its first night and is retired. Fitted to 25 Oct-12 Nov's seven $15 contests at 10 teams, so its record there is hindsight; Measurement grades it from 13 Nov (fit46b). Most of its fitted profit is one night (12 Nov); expect a little better than props calibrated, not more."
       : f.model === "fit7b"
-        ? "Second version (14 Nov): fitted to 21 Oct-11 Nov's eleven $15 contests at 10 teams, so its record there is hindsight; Measurement grades it from 13 Nov (fit7b). Most of its fitted profit is two October nights; the first version is still measured beside it."
+        ? "Second version (14 Nov): fitted to 21 Oct-11 Nov's eleven $15 contests at 10 teams, so its record there is hindsight (those nights are in its Measurement row; its test is from 13 Nov). Most of its fitted profit is two October nights; the first version is still measured beside it."
         : "Fitted to 20 Oct-10 Nov's $15 contests, so its record there is hindsight; Measurement grades it from 11 Nov (fit7, fit23, fitsize). Leaving one slate out, only the 7+ model kept a return."}</span>`;
 }
 $("fitmode").onchange = () => { if ($("fitmode").checked) $("studmode").checked = false; renderFitLine(); renderStudLine(); };
@@ -1210,7 +1210,7 @@ async function loadMeasure() {
         // amendment 16v (6 Nov 2026): the Raw props + 8/10 setup
         props8: "raw props, no player in more than 8 of 10 teams (the Raw props + 8/10 setup)",
         // amendment 32 (11 Nov 2026): the slate-size models, fitted to 20 Oct-10 Nov (hindsight there)
-        fit7: "7+ games model, first version (fitted to 20 Oct-10 Nov)", fit7b: "7+ games model, second version (fitted to 21 Oct-11 Nov; graded from 13 Nov)", fit46: "4-6 games model, first version (retired 13 Nov)", fit46b: "4-6 games model, second version (fitted to 25 Oct-12 Nov; graded from 13 Nov)", fit23: "2-3 games model (fitted to 20 Oct-10 Nov)",
+        fit7: "7+ games model, first version (fitted to 20 Oct-10 Nov)", fit7b: "7+ games model, second version (fitted to 21 Oct-11 Nov, so those nights are hindsight; its test is from 13 Nov)", fit46: "4-6 games model, first version (retired 13 Nov)", fit46b: "4-6 games model, second version (fitted to 25 Oct-12 Nov; graded from 13 Nov)", fit23: "2-3 games model (fitted to 20 Oct-10 Nov)",
         fitsize: "slate-size model: the model for the slate's size (fitted to 20 Oct-10 Nov)",
         // amendment 34 (11 Nov 2026): single game, half props
         sghalf: "single game: half props, half the calibrated sources (fitted to 20 Oct-10 Nov)",
