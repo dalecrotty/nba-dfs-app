@@ -96,8 +96,8 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     </div>
   </div>
 
-  <div id="mixcard" class="card hide">
-    <h2>Mix of projections</h2>
+  <details id="mixcard" class="card hide">
+    <summary><b>Projection numbers</b> <span id="mixsum" class="small mute"></span></summary>
     <div class="slider"><span>DC</span><input type="range" id="w_dc" min="0" max="100" step="1" value="100"><span><input type="number" id="n_dc" class="pct" min="0" max="100" inputmode="numeric" value="100">%</span></div>
     <div class="slider"><span>BM</span><input type="range" id="w_bm" min="0" max="100" step="1" value="0"><span><input type="number" id="n_bm" class="pct" min="0" max="100" inputmode="numeric" value="0">%</span></div>
     <div class="slider"><span>RW</span><input type="range" id="w_rw" min="0" max="100" step="1" value="0"><span><input type="number" id="n_rw" class="pct" min="0" max="100" inputmode="numeric" value="0">%</span></div>
@@ -106,7 +106,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     <div class="row small"><span>Bookmaker props:</span><select id="propsmode"><option value="off">off (sliders only)</option><option value="cal">calibrated: props where priced, the rest scaled to them</option><option value="raw">props where priced, the rest as the sliders</option><option value="half">half: half props, half the sliders' mix (calibrated)</option></select></div>
     <p class="small mute">Props = the bookmakers' lines for points, rebounds, assists and threes (median across books) in DraftStars points, with Drop Coverage's steals, blocks and turnovers. The books price the regulars, not most bench players; for those the sliders' mix is used, and "calibrated" scales it to the props (our sources ran about 2 points high on opening week). "Props, calibrated" = calibrated with even thirds, the way Measurement grades it.</p>
     <p class="small mute">Type the % for each source or drag the sliders (30 / 10 / 60 = 30% DC, 10% BM, 60% RW). If they don't add to 100, each is scaled by the total. The tested default is 100% Drop Coverage; the Monday report (research/results/sources) says whether a mix has earned a change. A player a source doesn't project gets the others' share.</p>
-  </div>
+  </details>
 
   <div class="pane hide" data-t="value">
     <div id="players" class="card hide">
@@ -133,32 +133,35 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
     <div id="controls" class="card hide">
       <h2>Build</h2>
       <div class="row">
-        <label class="chk">Lineups <input id="nlu" type="number" min="1" max="50" value="15" style="width:70px"></label>
-        <label class="chk">Differ by <input id="mindiff" type="number" min="1" max="8" value="3" style="width:60px"></label>
-        <label class="chk">Max per team <input id="maxteam" type="number" min="1" max="9" value="5" style="width:60px"></label>
-        <label class="chk"><input id="usestacks" type="checkbox"> Game stacks</label>
-        <label class="chk" title="On a stud night: every team holds 2+ of the 4 studs and 3+ of the 5 best values (FINDINGS F43, F46). Other nights: the normal build."><input id="studmode" type="checkbox"> Stud method</label>
-        <button id="studset" title="Props calibrated, 10 teams, differing by 3, Stud method on">Stud method setup</button>
-        <label class="chk" title="No player in more than this many of the teams (blank = no limit). Locked players are not capped.">Max teams per player <input id="maxexp" type="number" min="1" max="50" placeholder="any" style="width:60px"></label>
-        <button id="rawset" title="Even thirds, bookmaker props raw, 10 teams, differing by 3, no player in more than 8 (FINDINGS F34, F53)">Raw props + 8/10 setup</button>
+        <label class="chk" style="flex:1 1 100%;min-width:0;max-width:100%;margin-right:0" title="How the teams are built. Pick one; everything under Settings is set for you.">Method <select id="method" style="flex:1 1 0;min-width:0;width:0"></select></label>
+        <label class="chk">Teams <input id="nlu" type="number" min="1" max="50" value="10" style="width:70px"></label>
       </div>
-      <div class="row" style="margin-top:6px">
-        <label class="chk" title="The clean-sheet models fitted to this season's $15 multi-game contests, one per slate size (FINDINGS F74-F77). Its own numbers and team rules replace the sliders, differ by, max per team and max teams per player while it is ticked."><input id="fitmode" type="checkbox"> Slate-size model</label>
-        <select id="fitpick" title="Which model: the one for the slate's size, or a size of your choosing"><option value="auto">for this slate's size</option><option value="fit7b">7+ games model</option><option value="fit7">7+ games model, first version</option><option value="fit46b">4-6 games model</option><option value="fit23">2-3 games model</option></select>
-        <button id="fitset" title="Ticks Slate-size model, 10 teams, and turns the stud method off">Slate-size model setup</button>
-        <button id="sgset" title="Single game: even thirds, bookmaker props half, 5 teams, differing by 3 (FINDINGS F78)">Single game: half props setup</button>
-      </div>
+      <p id="methodline" class="small" style="margin:6px 0 0"></p>
       <p id="sgline" class="small" style="margin:6px 0 0"></p>
       <p id="fitline" class="small" style="margin:6px 0 0"></p>
       <p id="studline" class="small" style="margin:6px 0 0"></p>
       <p id="markline" class="small mute" style="margin:6px 0 0"></p>
-      <div id="stacks" class="hide small">
-        <div class="row"><label class="chk">Each lineup from at most <input id="nstack" type="number" min="1" max="9" value="2" style="width:56px"> games</label></div>
-        <p class="mute">A maximum: nobody is forced in from any game. Tick which games the lineups may use (the top games by bookmaker total plus key players out are ticked for you; a $9k+ player listed out counts 12 points of total); untick all to let the solver choose from every game. Tested 2024-26: stacks lost in both seasons (FINDINGS F21), so this is your call and off by default.</p>
-        <div id="stacklist"></div>
-      </div>
       <div class="row" style="margin-top:8px"><button id="build" class="p">Build lineups</button><span id="buildmsg" class="mute"></span></div>
       <p id="buildtime" class="small" style="margin:6px 0 0"></p>
+      <details id="adv" style="margin-top:10px">
+        <summary class="small"><b>Settings</b> <span class="mute">the method sets these; change one and the method becomes Custom</span></summary>
+        <div class="row" style="margin-top:6px">
+          <label class="chk">Differ by <input id="mindiff" type="number" min="1" max="8" value="3" style="width:60px"></label>
+          <label class="chk">Max per team <input id="maxteam" type="number" min="1" max="9" value="5" style="width:60px"></label>
+          <label class="chk" title="No player in more than this many of the teams (blank = no limit). Locked players are not capped.">Max teams per player <input id="maxexp" type="number" min="1" max="50" placeholder="any" style="width:60px"></label>
+        </div>
+        <div class="row">
+          <label class="chk" title="On a stud night: every team holds 2+ of the 4 studs and 3+ of the 5 best values (FINDINGS F43, F46). Other nights: the normal build."><input id="studmode" type="checkbox"> Stud method</label>
+          <label class="chk" title="The clean-sheet models fitted to this season's $15 multi-game contests, one per slate size (FINDINGS F74-F80). Its own numbers and team rules replace the sliders, differ by, max per team and max teams per player while it is ticked."><input id="fitmode" type="checkbox"> Slate-size model</label>
+          <select id="fitpick" style="width:auto;max-width:100%" title="Which model: the one for the slate's size, or a size of your choosing"><option value="auto">for this slate's size</option><option value="fit7b">7+ games model</option><option value="fit7">7+ games model, first version</option><option value="fit46b">4-6 games model</option><option value="fit23">2-3 games model</option></select>
+          <label class="chk"><input id="usestacks" type="checkbox"> Game stacks</label>
+        </div>
+        <div id="stacks" class="hide small">
+          <div class="row"><label class="chk">Each lineup from at most <input id="nstack" type="number" min="1" max="9" value="2" style="width:56px"> games</label></div>
+          <p class="mute">A maximum: nobody is forced in from any game. Tick which games the lineups may use (the top games by bookmaker total plus key players out are ticked for you; a $9k+ player listed out counts 12 points of total); untick all to let the solver choose from every game. Tested 2024-26: stacks lost in both seasons (FINDINGS F21), so this is your call and off by default.</p>
+          <div id="stacklist"></div>
+        </div>
+      </details>
     </div>
     <div id="result" class="card hide">
       <h2>Lineups</h2>
@@ -438,15 +441,25 @@ async function loadSlate(quiet, stay) {
       renderStacks();
       $("result").classList.add("hide");
       S.lineups = [];
+      S.maxN = +c.entries_per_person || 15;
+      S.newContest = true;
     }
     for (const el of ["controls", "players", "swaps"]) $(el).classList.remove("hide");
+    const keepMethod = $("method").value;
+    fillMethods();
+    if ([...$("method").options].some((o) => o.value === keepMethod)) $("method").value = keepMethod;
     const byDs = new Map(S.pool.map((p) => [String(p.ds_id), p.i]));
     S.marks = {};
     for (const [d, m] of Object.entries(keptMarks)) if (byDs.has(String(d))) S.marks[byDs.get(String(d))] = m;
     S.markN = {};
     for (const [d, c] of Object.entries(keptN)) if (byDs.has(String(d))) S.markN[byDs.get(String(d))] = c;
     if (same) S.lineups = keptLineups.map((lu) => lu.map(({ ds, ...z }) => ({ ...z, i: byDs.get(String(ds)) }))).filter((lu) => lu.every((z) => z.i != null));
-    renderPlayers(); fillBuildPick(s.builds);
+    if (S.newContest) {            // a new contest starts on the method last used for its kind
+      S.newContest = false;
+      const kind = methodKind(), saved = store.get("method_" + kind);
+      applyMethod([...$("method").options].some((o) => o.value === saved) ? saved : kind === "single" ? "sghalf" : "propscal");
+    } else { renderPlayers(); renderMethodLine(); }
+    fillBuildPick(s.builds);
     document.querySelectorAll(".tab").forEach((b) => b.disabled = false);
     if (!same && !stay) showTab("value");
     if (!quiet) toast("Slate loaded");
@@ -775,7 +788,7 @@ $("build").onclick = async () => {
       lus.push(lu); for (const z of lu) used[z.i] = (used[z.i] || 0) + 1;
     }
     if (!lus.length) throw new Error(base.require ? "no legal lineup with the stud method's studs and value core: loosen the locks or excludes" : "no legal lineup: loosen the locks, or allow more games in the stack");
-    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), mark_counts: Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c])), stacks, max_exposure: maxExp, props_cover: propsCover(),
+    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { method: $("method").value, weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), mark_counts: Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c])), stacks, max_exposure: maxExp, props_cover: propsCover(),
       stud: plan ? { night: !!plan.close, game: plan.top ? `${plan.top.away}@${plan.top.home}` : null, total: plan.top ? plan.top.btotal : null, spread: plan.top ? plan.top.spread : null,
                      studs: plan.close ? plan.studs.map((p) => p.ds_id) : [], core: plan.close ? plan.core.map((p) => p.ds_id) : [] } : null };
     renderLineups(pool);
@@ -791,14 +804,6 @@ function renderStudLine() {
   el.innerHTML = studText(studPlan(), true);
 }
 $("studmode").onchange = renderStudLine;
-$("rawset").onclick = () => {
-  setMix(33, 33, 33); $("propsmode").value = "raw"; $("nlu").value = 10; $("mindiff").value = 3; $("maxexp").value = 8; $("studmode").checked = false;
-  remix(); renderMarks(); renderStudLine();
-};
-$("studset").onclick = () => {
-  setMix(33, 33, 33); $("propsmode").value = "cal"; $("nlu").value = 10; $("mindiff").value = 3; $("studmode").checked = true;
-  remix(); renderMarks(); renderStudLine();
-};
 // ── the slate-size models (owner, 11 Nov 2026: "they should all be added as measurement and
 // builds"; FINDINGS F74-F77, PREREG_sources amendments 28-32; Measurement fit7 / fit46 / fit23 /
 // fitsize, research/mixgrade.py FIT, the same settings) ──
@@ -901,17 +906,61 @@ function renderSgLine() {
       : `<b>Not a close game</b> (${name}, spread ${sp.toFixed(1)}): the close-games model skips it; half props on every game still plays.`;
   el.innerHTML += `<br><span class="mute">Fitted to 20 Oct-10 Nov's 16 $15 single-game contests (half props +$504 at 5 teams); Measurement grades both from 11 Nov.</span>`;
 }
-$("sgset").onclick = () => {
-  setMix(33, 33, 33); $("propsmode").value = "half"; $("nlu").value = 5; $("mindiff").value = 3; $("maxexp").value = "";
-  $("studmode").checked = false; $("fitmode").checked = false;
-  remix(); renderMarks(); renderStudLine(); renderFitLine(); renderSgLine();
+// ── one Method (owner, 16 Nov 2026: "Can we clean up the build infrastructure with buttons and
+// dropdowns and confusion?"): a method sets everything under Settings and the projection
+// numbers; the old setup buttons are its entries. A setting changed by hand makes it Custom. ──
+const METHODS = {
+  propscal: { name: "Props calibrated", multi: 1, single: 1, line: "Bookmaker props where the books price a player; the three sources, scaled to the props, for the rest. The plainest build, with the longest record." },
+  fit: { name: "Slate-size model", multi: 1, line: "" },
+  stud: { name: "Stud method", multi: 1, line: "" },
+  raw8: { name: "Raw props, max 8 of 10 teams a player", multi: 1, line: "Bookmaker props where priced, the even split of the three sources for the rest; no player in more than 8 teams." },
+  sghalf: { name: "Half props", single: 1, line: "" },
+  custom: { name: "Custom", multi: 1, single: 1, line: "Your own numbers and settings (open Projection numbers and Settings)." },
 };
-$("fitset").onclick = () => {
-  setMix(33, 33, 33); $("propsmode").value = "cal"; $("nlu").value = 10; $("studmode").checked = false; $("fitmode").checked = true;
-  const c = FIT[fitChoice()];
-  $("mindiff").value = c.d; $("maxteam").value = c.mpt || 5; $("maxexp").value = c.cap || "";
-  remix(); renderMarks(); renderStudLine(); renderFitLine();
-};
+function methodKind() { return S.slate && S.slate.rules.captain ? "single" : "multi"; }
+function fillMethods() {
+  const kind = methodKind(), g = (S.slate && S.slate.games || []).length;
+  $("method").innerHTML = Object.entries(METHODS).filter(([, m]) => m[kind]).map(([k, m]) =>
+    `<option value="${k}">${k === "fit" ? `${FIT_NAME[fitChoice()]} (this slate: ${g} games)` : m.name}</option>`).join("");
+}
+function renderMethodLine() {
+  const m = METHODS[$("method").value];
+  $("methodline").textContent = m ? m.line : "";
+  const w = weights(), pm = { off: "no bookmaker props", cal: "props calibrated", raw: "props raw", half: "half props" }[$("propsmode").value];
+  $("mixsum").textContent = `${Math.round(100 * w.dc)} / ${Math.round(100 * w.bm)} / ${Math.round(100 * w.rw)} DC/BM/RW · ${pm}`;
+}
+function applyMethod(m) {
+  $("method").value = m;
+  store.set("method_" + methodKind(), m);
+  if (m !== "custom") {
+    const cap = methodKind() === "single";
+    $("studmode").checked = false; $("fitmode").checked = false; $("fitpick").value = "auto";
+    $("usestacks").checked = false; $("stacks").classList.add("hide");
+    $("mindiff").value = 3; $("maxteam").value = (S.slate && S.slate.rules.maxPerTeam) || 5; $("maxexp").value = "";
+    setMix(33, 33, 33); $("nlu").value = Math.min(cap ? 5 : 10, S.maxN || 15);
+    $("propsmode").value = m === "raw8" ? "raw" : m === "sghalf" ? "half" : "cal";
+    if (m === "raw8") $("maxexp").value = 8;
+    if (m === "stud") $("studmode").checked = true;
+    if (m === "fit") {
+      $("fitmode").checked = true;
+      const c = FIT[fitChoice()];
+      $("mindiff").value = c.d; $("maxteam").value = c.mpt || $("maxteam").value; $("maxexp").value = c.cap || "";
+    }
+  } else { $("adv").open = true; }
+  remix(); renderMarks(); renderStudLine(); renderFitLine(); renderSgLine(); renderMethodLine();
+}
+function toCustom() {                         // a setting changed by hand
+  if ($("method").value !== "custom") { $("method").value = "custom"; store.set("method_" + methodKind(), "custom"); }
+  renderMethodLine();
+}
+$("method").onchange = () => applyMethod($("method").value);
+for (const id of ["mindiff", "maxteam", "maxexp", "usestacks", "studmode", "fitmode", "propsmode", "w_dc", "w_bm", "w_rw", "n_dc", "n_bm", "n_rw"])
+  $(id).addEventListener(id.startsWith("w_") || id.startsWith("n_") ? "input" : "change", toCustom);
+for (const id of ["even", "dconly", "propscal"]) $(id).addEventListener("click", toCustom);
+// another size's model is still the slate-size method
+$("fitpick").addEventListener("change", () => {
+  if ($("fitmode").checked && $("method").value === "fit") { const c = FIT[fitChoice()]; $("mindiff").value = c.d; $("maxteam").value = c.mpt || $("maxteam").value; $("maxexp").value = c.cap || ""; }
+});
 function lineupProj(lu, pool) { const by = new Map(pool.map((p) => [p.i, p])); return lu.reduce((a, z) => a + (z.slot === "CAP" ? 1.5 : 1) * (by.get(z.i)?.mean || 0), 0); }
 function renderLineups(pool) {
   const by = new Map(S.pool.map((p) => [p.i, p]));
