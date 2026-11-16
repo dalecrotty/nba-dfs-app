@@ -447,7 +447,7 @@ async function loadSlate(quiet, stay) {
     for (const el of ["controls", "players", "swaps"]) $(el).classList.remove("hide");
     const keepMethod = $("method").value;
     fillMethods();
-    if ([...$("method").options].some((o) => o.value === keepMethod)) $("method").value = keepMethod;
+    if ([...$("method").options].some((o) => o.value === keepMethod && !o.disabled)) $("method").value = keepMethod;
     const byDs = new Map(S.pool.map((p) => [String(p.ds_id), p.i]));
     S.marks = {};
     for (const [d, m] of Object.entries(keptMarks)) if (byDs.has(String(d))) S.marks[byDs.get(String(d))] = m;
@@ -457,7 +457,7 @@ async function loadSlate(quiet, stay) {
     if (S.newContest) {            // a new contest starts on the method last used for its kind
       S.newContest = false;
       const kind = methodKind(), saved = store.get("method_" + kind);
-      applyMethod([...$("method").options].some((o) => o.value === saved) ? saved : kind === "single" ? "sghalf" : "propscal");
+      applyMethod([...$("method").options].some((o) => o.value === saved && !o.disabled) ? saved : kind === "single" ? "sghalf" : "propscal");
     } else { renderPlayers(); renderMethodLine(); }
     fillBuildPick(s.builds);
     document.querySelectorAll(".tab").forEach((b) => b.disabled = false);
@@ -914,14 +914,18 @@ const METHODS = {
   fit: { name: "Slate-size model", multi: 1, line: "" },
   stud: { name: "Stud method", multi: 1, line: "" },
   raw8: { name: "Raw props, max 8 of 10 teams a player", multi: 1, line: "Bookmaker props where priced, the even split of the three sources for the rest; no player in more than 8 teams." },
-  sghalf: { name: "Half props", single: 1, line: "" },
+  sghalf: { name: "Single game: half props", single: 1, line: "" },
   custom: { name: "Custom", multi: 1, single: 1, line: "Your own numbers and settings (open Projection numbers and Settings)." },
 };
 function methodKind() { return S.slate && S.slate.rules.captain ? "single" : "multi"; }
 function fillMethods() {
   const kind = methodKind(), g = (S.slate && S.slate.games || []).length;
-  $("method").innerHTML = Object.entries(METHODS).filter(([, m]) => m[kind]).map(([k, m]) =>
-    `<option value="${k}">${k === "fit" ? `${FIT_NAME[fitChoice()]} (this slate: ${g} games)` : m.name}</option>`).join("");
+  // every method is listed; the ones for the other kind of contest are greyed out, so nothing goes missing
+  // (owner, 16 Nov 2026: "Where is single slate method?" with a multi-game contest loaded)
+  const other = kind === "single" ? "multi-game contests only" : "load a single-game contest";
+  $("method").innerHTML = Object.entries(METHODS).sort(([, a], [, b]) => (b[kind] ? 1 : 0) - (a[kind] ? 1 : 0)).map(([k, m]) => m[kind]
+    ? `<option value="${k}">${k === "fit" ? `${FIT_NAME[fitChoice()]} (this slate: ${g} games)` : m.name}</option>`
+    : `<option value="${k}" disabled>${k === "fit" ? "Slate-size model" : m.name} (${other})</option>`).join("");
 }
 function renderMethodLine() {
   const m = METHODS[$("method").value];
