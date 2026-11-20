@@ -529,19 +529,25 @@ document.addEventListener("click", async (ev) => {
     const date = S.slate && S.slate.contest ? S.slate.contest.slate_date : null;
     const r = await api("/props-refresh", { method: "POST", body: JSON.stringify({ date }) });
     if (r.ok || r.last) {
+      // r.last can be a pull already booked for later (the pre-tip pull at T-25), not only one asked
+      // for earlier (owner, 19 Nov 2026: "asked at 10:35 AM, still waiting (-383s)" at 10:29)
       say(r.ok ? "Pulling the bookmaker lines now… this usually takes about a minute. The app will tell you when they're in."
-               : `Already asked at ${hm(r.last)}; waiting for those lines…`);
+               : new Date(r.last).getTime() > Date.now()
+                 ? `A pull is already booked for ${hm(r.last)} (${untilText(r.last)}); the app will load those lines when they land.`
+                 : `Already asked at ${hm(r.last)}; waiting for those lines…`);
       watchProps(date, r.ok ? r.queued : r.last);
     } else say(`<span class="bad">Not pulled: ${r.error}</span>`);
   } catch (e) { say(`<span class="bad">${e.message}</span>`); }
   setTimeout(() => document.querySelectorAll(".prref").forEach((x) => x.disabled = false), 15000);
 });
 function hm(t) { return new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
+function untilText(t) { const m = Math.max(1, Math.round((new Date(t).getTime() - Date.now()) / 60e3)); return `in ${m} min`; }
 // after a Refresh props tap, watch for the new lines and reload the projections with them
 // (owner, 2 Nov 2026: "how the actual fuck am i supposed to know this? Where does it tell me")
 async function watchProps(date, since) {
   const say = (t) => document.querySelectorAll(".prmsg").forEach((e) => e.innerHTML = t);
-  const from = new Date(since).getTime() - 5000, until = Date.now() + 5 * 60e3;
+  // watch until 5 minutes after the pull is due, however far ahead it was booked
+  const from = new Date(since).getTime() - 5000, until = Math.max(Date.now(), new Date(since).getTime()) + 5 * 60e3;
   S.propsWatch = (S.propsWatch || 0) + 1; const me = S.propsWatch;
   while (Date.now() < until && me === S.propsWatch) {
     await new Promise((ok) => setTimeout(ok, S.propsPollMs || 10000));
@@ -554,7 +560,9 @@ async function watchProps(date, since) {
       toast("New bookmaker lines in");
       return;
     }
-    say(`Pulling the bookmaker lines… asked at ${hm(since)}, still waiting (${Math.round((Date.now() - new Date(since).getTime()) / 1000)}s).`);
+    say(new Date(since).getTime() > Date.now()
+      ? `A pull is booked for ${hm(since)} (${untilText(since)}); the app will load those lines when they land.`
+      : `Pulling the bookmaker lines… asked at ${hm(since)}, still waiting (${Math.round((Date.now() - new Date(since).getTime()) / 1000)}s).`);
   }
   if (me === S.propsWatch) say(`<span class="warn">No new lines 5 minutes after asking: the pull was skipped or failed (usually the odds credits). The lines shown are still the earlier ones.</span>`);
 }
