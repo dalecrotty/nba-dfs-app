@@ -936,7 +936,7 @@ const METHODS = {
   propscal: { name: "Props calibrated", multi: 1, single: 1, line: "Bookmaker props where the books price a player; the three sources, scaled to the props, for the rest. The plainest build, with the longest record." },
   fit: { name: "Slate-size model", multi: 1, line: "" },
   stud: { name: "Stud method", multi: 1, line: "" },
-  halfbl: { name: "Half props, blowouts down", multi: 1, line: "Half the bookmaker number, half the three sources scaled to it; players in a game with a spread of 10+ marked down 5%; ten plain teams differing by 3. The best build from 1 November that wasn't fitted to the season (+82% on the $15 contests on paper, 20 Oct-21 Nov); graded in Measurement from 22 Nov." },
+  halfbl: { name: "Half props, blowouts down", multi: 1, line: "Half the bookmaker number, half the three sources scaled to it; players in a game with a spread of 10+ marked down 5%; ten plain teams differing by 3. The best build from 1 November that wasn't fitted to the season (+82% on the $15 contests on paper, 20 Oct-21 Nov); in Measurement as halfbl (its test is the nights from 22 Nov)." },
   raw8: { name: "Raw props, max 8 of 10 teams a player", multi: 1, line: "Bookmaker props where priced, the even split of the three sources for the rest; no player in more than 8 teams." },
   sghalf: { name: "Single game: half props", single: 1, line: "" },
   custom: { name: "Custom", multi: 1, single: 1, line: "Your own numbers and settings (open Projection numbers and Settings)." },
@@ -1294,7 +1294,7 @@ async function loadMeasure() {
         band7: "new 7+ model on 7+ game slates, props calibrated below 7 (fitted to 20 Oct-19 Nov; its test is from 20 Nov)",
         // amendment 34 (11 Nov 2026): single game, half props
         // amendment 60 (23 Nov 2026): half props with blowout games down, graded from 22 Nov
-        halfbl: "half props, players in a 10+ spread game down 5% (the rule chosen on 1-21 Nov; its test is from 22 Nov)",
+        halfbl: "half props, players in a 10+ spread game down 5% (the blowout rule was chosen on 1-21 Nov, so those nights are hindsight; its test is from 22 Nov)",
         sghalf: "single game: half props, half the calibrated sources (fitted to 20 Oct-10 Nov)",
         sgclose: "single game: half props, close games only (spread under 4.5; fitted to 20 Oct-10 Nov)" };
       const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === "props" || m.mix === "props50" || m.mix === "propscal" || m.mix === "fitsize" || m.mix === "bandsize" || m.mix === "band7" || m.mix === "halfbl" || SPREAD_TAGS[m.mix] || m.mix === curMix || m.wins > 0 || m.top10 > 0;
