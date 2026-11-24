@@ -62,7 +62,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
 </style>
 </head>
 <body>
-<header><h1>🏀 DFS Cruncher</h1><div class="row"><span id="who" class="mute"></span><button id="theme" title="Light / dark (follows your phone until you tap it)">🌙</button><button id="signout" class="hide">Sign out</button></div></header>
+<header><h1>🏀 DFS Cruncher</h1><div class="row"><span id="health" class="small mute"></span><span id="who" class="mute"></span><button id="theme" title="Light / dark (follows your phone until you tap it)">🌙</button><button id="signout" class="hide">Sign out</button></div></header>
 <main>
 <section id="signin" class="card">
   <h2>Sign in</h2>
@@ -240,6 +240,7 @@ function refreshSession() {
   const inApp = !!store.get("dfs_pin");
   $("signin").classList.toggle("hide", inApp); $("app").classList.toggle("hide", !inApp);
   $("signout").classList.toggle("hide", !inApp);
+  if (inApp) setTimeout(loadHealth, 0);
   $("who").textContent = inApp ? (store.get("dfs_name") || "Dale") : "";
   if (inApp) { loadBuildsToday(); if (!S.lobby) loadLobby(); loadDsAcct(); }
 }
@@ -259,6 +260,31 @@ $("signout").onclick = () => { store.set("dfs_pin", null); S.slate = null; locat
 const LINES_API = "https://gpupsgkyyldqyfemtjml.supabase.co/functions/v1/dfs-lines";
 const CODE_ALIAS = { PHO: "PHX", NO: "NOP", GS: "GSW", NY: "NYK", SA: "SAS", UTAH: "UTA", WSH: "WAS", BRK: "BKN", CHO: "CHA" };
 const code = (t) => { const u = String(t || "").toUpperCase(); return CODE_ALIAS[u] || u; };
+// the header's health line (owner, 24 Nov 2026: "put the alert in the app header"): the database's
+// size against its limit and whether the five-minute captures of projections, props and game
+// lines are still landing. Quiet when all is well, red when not.
+async function loadHealth() {
+  const el = $("health"); if (!el || !store.get("dfs_pin")) return;
+  try {
+    const r = await fetch(LINES_API + "?health=1", { headers: { "x-app-pin": store.get("dfs_pin") || "" } });
+    const h = await r.json();
+    if (!r.ok || h.error) throw new Error(h.error || r.status);
+    const gb = (h.db_mb / 1024).toFixed(1), lim = Math.round(h.limit_mb / 1024), share = h.db_mb / h.limit_mb, bad = [];
+    if (h.read_only) bad.push("the database is read-only: nothing is being captured");
+    if (share >= 0.9) bad.push(`database ${gb} of ${lim} GB`); 
+    const name = { "dfs-proj-snapshot": "projections", "dfs-props-snapshot": "props", "dfs-lines-snapshot": "game lines" };
+    for (const j of h.jobs || []) {
+      const age = j.last_ok ? (new Date(h.now) - new Date(j.last_ok)) / 60000 : Infinity;
+      if (age > 20) bad.push(`${name[j.job] || j.job} not captured for ${age === Infinity ? "6+ hours" : Math.round(age) + " minutes"}`);
+      else if (j.failed_1h >= 3) bad.push(`${name[j.job] || j.job} capture failed ${j.failed_1h} times in the last hour`);
+    }
+    if ((h.jobs || []).length < 3) bad.push("a capture job is missing");
+    el.className = bad.length ? "small bad" : share >= 0.75 ? "small warn" : "small mute";
+    el.textContent = bad.length ? "⚠ " + bad.join("; ") : `data ${gb} of ${lim} GB${share >= 0.75 ? " (filling up)" : ""} · captures OK`;
+    el.title = "Database size against its limit, and whether projections, props and game lines were captured in the last 20 minutes";
+  } catch (e) { el.className = "small warn"; el.textContent = "health check failed"; }
+}
+setInterval(loadHealth, 5 * 60 * 1000);
 async function attachLines(s) {
   if (!s || !s.contest || !s.contest.slate_date || s.contest.is_captain) return;
   try {
