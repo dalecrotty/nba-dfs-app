@@ -324,25 +324,10 @@ document.querySelectorAll(".tab").forEach((b) => b.onclick = () => showTab(b.dat
 
 // ── lobby ───────────────────────────────────────────────────────────────
 const money = (v) => (v == null ? "?" : "$" + (+v).toLocaleString(undefined, { maximumFractionDigits: 0 }));
-// Where to play (owner, 24 Oct 2026, research/PREREG_where.md): the $2 Minis and
-// $15 tournaments only; single game 5 teams (owner, 28 Oct 2026); multi-game 3 teams in a 4+ game slate
-// (a $15 field of 1,000+), skip 2-3 game slates and smaller $15 fields; small
-// stakes before 1 December (the method lost Oct-Nov 2025 and made money Dec-Feb)
-function whereToPlay(c) {
-  const name = String(c.name || ""), fee = +c.entry_fee;
-  const tourney = /\$[0-9][0-9,]*\+/.test(name) && !/double up|triple up|stick it|6-player|head to head|\bh2h\b|50\/50/i.test(name);
-  if (!tourney || (fee !== 2 && fee !== 15)) return null;
-  const d = String(c.slate_date || c.starts_at || "").slice(0, 10), early = d && d.slice(5) >= "07-01" && d.slice(5) < "12-01";
-  const note = early ? " · Oct–Nov: small stakes" : "";
-  // single game 5 teams (owner, 28 Oct 2026: "I want 5-build for single games"; history: 1 team +32%,
-  // 5 teams +6%, both seasons positive, F18/F27)
-  if (c.is_captain) return { play: true, teams: 5, text: `PLAY · 5 teams${note}`, why: "single game: 5 teams (owner, 28 Oct 2026); history: positive in both seasons" };
-  const games = +c.n_games || 0, field = +c.max_entries || 0;
-  if (games && games <= 3) return { play: false, teams: 0, text: "SKIP · 2–3 game slate", why: "2-3 game slates lost in both seasons (F23)" };
-  if (fee === 15 && field && field < 1000) return { play: false, teams: 0, text: "SKIP · field under 1,000", why: "smaller $15 fields lost or were mixed (F23; the history is $15 contests; $2 Minis cap under 1,000 by design)" };
-  return { play: true, teams: 3, text: `PLAY · 3 teams${note}`, why: "4+ games and a field of 1,000+: positive in both seasons; the first 3 teams did best (F23)" };
-}
-const ruleTag = (c) => { const r = whereToPlay(c); return r ? ` <span class="${r.play ? "ok" : "bad"} small" title="${r.why}"><b>${r.text}</b></span>` : ""; };
+// The PLAY / SKIP tags (the "where to play" rule of 24 Oct 2026: 3 teams, skip 2-3 game slates) were
+// taken out on 24 Nov 2026 (owner: "Yes, remove the PLAY / SKIP tags from the app. It's a label
+// change, not a method change"): he plays ten teams in the $15 and the $2 Mini on every slate size,
+// five in a single game. A new contest starts at ten teams (five in a single game).
 async function loadLobby() {
   $("lobby").textContent = "Loading…";
   try {
@@ -352,7 +337,7 @@ async function loadLobby() {
     const show = rows.filter((c) => all || c.entry_fee === 2 || c.entry_fee === 15);
     if (!show.length) { $("lobby").textContent = rows.length ? "No $2 or $15 NBA contest in the lobby right now (tick 'every entry fee' to see the rest)." : "No NBA contests in the lobby right now."; return; }
     const payback = (c) => { if (!c.prize_pool || !c.entry_fee) return ""; const full = c.max_entries ? c.prize_pool / (c.entry_fee * c.max_entries) : null; const now = c.entries ? c.prize_pool / (c.entry_fee * c.entries) : null; return ` · pays back ${now != null ? Math.round(100 * Math.min(now, 9.99)) + "% now" : "—"}${full != null ? `, ${Math.round(100 * full)}% if full` : ""}`; };
-    $("lobby").innerHTML = show.map((c) => `<div class="lu lobbyrow" data-id="${c.contest_id}" style="cursor:pointer"><b>${c.name || c.contest_id}</b>${ruleTag(c)} · ${c.is_captain ? "single game" : (c.n_games ?? "?") + " games"} · $${c.entry_fee ?? "?"} · prize pool ${money(c.prize_pool)} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} each · tips ${c.starts_at ? fmtT(c.starts_at) : "?"}${payback(c)}</div>`).join("");
+    $("lobby").innerHTML = show.map((c) => `<div class="lu lobbyrow" data-id="${c.contest_id}" style="cursor:pointer"><b>${c.name || c.contest_id}</b> · ${c.is_captain ? "single game" : (c.n_games ?? "?") + " games"} · $${c.entry_fee ?? "?"} · prize pool ${money(c.prize_pool)} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} each · tips ${c.starts_at ? fmtT(c.starts_at) : "?"}${payback(c)}</div>`).join("");
     document.querySelectorAll(".lobbyrow").forEach((el) => el.onclick = () => { $("contest").value = el.dataset.id; loadSlate(); window.scrollTo({ top: $("slateinfo").offsetTop - 80, behavior: "smooth" }); });
   } catch (e) { $("lobby").innerHTML = `<span class="bad">${e.message}</span>`; }
 }
@@ -420,7 +405,7 @@ async function loadSlate(quiet, stay) {
     S.slate = s; S.slateId = id; setTimeout(renderBuildTime, 0);
     S.pool = s.pool.map((p, i) => ({ ...p, i, posList: p.pos })); S.propsK = null;
     const c = s.contest, n = S.pool.filter((p) => p.dc != null).length;
-    $("slateinfo").innerHTML = `<b>${c.name || id}</b>${ruleTag(c)} · ${c.is_captain ? "single game (captain)" : c.n_games + " games"} · US date ${c.slate_date} · $${c.entry_fee ?? "?"} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} per person<br>`
+    $("slateinfo").innerHTML = `<b>${c.name || id}</b> · ${c.is_captain ? "single game (captain)" : c.n_games + " games"} · US date ${c.slate_date} · $${c.entry_fee ?? "?"} · ${c.entries ?? "?"}/${c.max_entries ?? "?"} entries · max ${c.entries_per_person ?? "?"} per person<br>`
       + `Tips: ${s.games.map((g) => `${g.away}@${g.home} ${g.tip ? fmtT(g.tip) : "?"}`).join(", ")}<br>`
       + `${S.pool.length} players, ${n} with a Drop Coverage number, ${S.pool.filter((p) => p.player_id == null).length} unmatched names`;
     // checked = when we last looked; changed = when the numbers last moved (owner, 20 Oct 2026)
@@ -457,10 +442,8 @@ async function loadSlate(quiet, stay) {
       $("ages").innerHTML += ` <span class="warn">Drop Coverage has no numbers for this slate yet (its run for the day hasn't happened), so the sliders are on ${have.bm && have.rw ? "BM and RW" : have.bm ? "BM" : "RW"} for now. Tap Refresh projections later and move DC back up when it shows a time.</span>`;
     }
     if (!same) {              // a new contest starts from its own defaults
-      // the where-to-play rule's team count where it applies (single game 5, owner 28 Oct 2026;
-      // multi-game 3), else the contest's cap; teams differ by 3, as Measurement grades them
-      const wr = whereToPlay(c);
-      $("nlu").value = Math.min(wr && wr.play ? wr.teams : 15, +c.entries_per_person || 15);
+      // ten teams (five in a single game), within the contest's cap; teams differ by 3, as Measurement grades them
+      $("nlu").value = Math.min(c.is_captain ? 5 : 10, +c.entries_per_person || 15);
       $("maxteam").value = s.rules.maxPerTeam || 5;
       $("mindiff").value = 3;
       $("nstack").max = Math.max(1, s.games.length); $("nstack").value = s.games.length;      // default: every game (no limit)
@@ -707,10 +690,9 @@ function renderBuildTime() {
   const first = Math.min(...S.slate.games.map((g) => g.tip ? new Date(g.tip).getTime() : Infinity));
   if (!Number.isFinite(first)) { el.textContent = ""; return; }
   const min = Math.round((first - Date.now()) / 60000);
-  const r = whereToPlay(S.slate.contest); const rule = r ? ` Rule for this contest: <b>${r.text}</b>.` : "";
-  if (min > 15) el.innerHTML = `<span class="warn">First tip in ${min >= 60 ? Math.floor(min / 60) + "h " : ""}${min % 60}m. Build in the last 15 minutes:</span> the bookmakers' closing lines and the starting fives land then. Tap Refresh projections, then Build.${rule}`;
-  else if (min > 0) el.innerHTML = `<span class="ok"><b>Now's the time.</b></span> First tip in ${min}m: tap Refresh projections, then Build.${rule}`;
-  else el.innerHTML = `First tip has gone; later games: use the Swaps tab.${rule}`;
+  if (min > 15) el.innerHTML = `<span class="warn">First tip in ${min >= 60 ? Math.floor(min / 60) + "h " : ""}${min % 60}m. Build in the last 15 minutes:</span> the bookmakers' closing lines and the starting fives land then. Tap Refresh projections, then Build.`;
+  else if (min > 0) el.innerHTML = `<span class="ok"><b>Now's the time.</b></span> First tip in ${min}m: tap Refresh projections, then Build.`;
+  else el.innerHTML = `First tip has gone; later games: use the Swaps tab.`;
 }
 setInterval(renderBuildTime, 30000);
 
