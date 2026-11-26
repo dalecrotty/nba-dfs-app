@@ -221,7 +221,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
 <div id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/highs@1.15.3/build/highs.js"></script>
-<script src="lineup.js"></script>
+<script src="lineup.js?v=20261126"></script>
 <script>
 const API = "https://gpupsgkyyldqyfemtjml.supabase.co/functions/v1/dfs";
 const HIGHS_FACTORY = window.Module;     // highs.js (emscripten) exposes its loader as the global Module in a browser
@@ -1611,7 +1611,7 @@ $("swapcheck").onclick = async () => {
   const heldPriced = [...heldSet].filter((i) => by.get(i)?.pr != null).length;
   const coverLine = cv.big ? `<p class="small ${cv.priced / cv.big < 0.5 ? "warn" : "mute"}">Lines now: ${cv.priced} of ${cv.big} players $8k+ priced${was && was.big ? ` (${was.priced} of ${was.big} when these teams were built)` : ""}; ${heldPriced} of the ${heldSet.size} players in your teams have a line.${cv.priced / cv.big < 0.5 ? " Under half the slate is priced: the later games' lines usually land an hour or two before they tip, so check again then." : ""}</p>` : "";
   $("swaplist").innerHTML = coverLine + (r.swaps.length
-    ? r.swaps.map((s) => `<div class="lu"><b>SWAP</b> ${tag(s.x)} <b>→</b> ${tag(s.y)} · ${outNow.has(s.x) ? "out tonight" : "+" + s.step.toFixed(1) + " pts each"} · ${s.touched.length} team(s)</div>`).join("")
+    ? (r.swaps.length > 1 ? `<p class="small mute">Do these in DraftStars in this order: each swap only changes the teams it fits, and the next one covers the rest.</p>` : "") + r.swaps.map((s, k) => `<div class="lu"><b>${r.swaps.length > 1 ? (k + 1) + ". " : ""}SWAP</b> ${tag(s.x)} <b>→</b> ${tag(s.y)} · ${outNow.has(s.x) ? "out tonight" : "+" + s.step.toFixed(1) + " pts each"} · ${s.touched.length} team(s)</div>`).join("")
     : `<p class="ok">No swap worth ${SWAP_MIN}+ points per team. Leave the teams as they are.</p>`);
   const stuck = [...new Set(r.lineups.flatMap((lu) => lu.map((z) => z.i)))].filter((i) => outNow.has(i));
   if (stuck.length) $("swaplist").innerHTML += `<p class="warn">Still in and out tonight (no legal bulk swap covers every team): ${stuck.map((i) => by.get(i).name).join(", ")}</p>`;

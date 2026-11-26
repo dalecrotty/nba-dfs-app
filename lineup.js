@@ -176,7 +176,11 @@
             const slot = lu.find((z) => z.i === x).slot;
             if (legal(lu, x, y, slot)) touched.push(k);
           }
-          if (touched.length && step * touched.length > bestGain) { best = { x, y, touched, step }; bestGain = step * touched.length; }
+          // the best player first, then the next best for the teams he doesn't fit (owner, 26 Nov 2026:
+          // "give me the best option and then the next best"; Fox out, Melton 25.4 fitted 3 of his 4
+          // teams and the one swap chosen was Williams 22.8 in all 4): the biggest gain per team wins
+          // a round, more teams breaks a tie, and the next round covers the teams still holding him
+          if (touched.length && (step > bestGain + 1e-9 || (Math.abs(step - bestGain) <= 1e-9 && best && touched.length > best.touched.length))) { best = { x, y, touched, step }; bestGain = step; }
         }
       }
       if (!best) break;
