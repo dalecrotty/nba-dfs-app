@@ -472,7 +472,7 @@ async function loadSlate(quiet, stay) {
       // first time in a bracket: 2 games and 3-4 games start on Props calibrated + star cover
       // (2 games: owner, 28 Nov 2026 AEDT, "Use star cover on 2-game $2 Mini too")
       const saved = store.get("method_" + br);
-      applyMethod([...$("method").options].some((o) => o.value === saved && !o.disabled) ? saved : kind === "single" ? "sghalf" : br === "multi34s" || br === "multi2s" ? "propsstar" : "propscal");
+      applyMethod([...$("method").options].some((o) => o.value === saved && !o.disabled) ? saved : kind === "single" ? "sghalf" : br === "multi34s" || br === "multi2s" ? "propsstar" : br === "multi9" ? "fit" : "propscal");
     } else { renderPlayers(); renderMethodLine(); }
     fillBuildPick(s.builds);
     document.querySelectorAll(".tab").forEach((b) => b.disabled = false);
@@ -976,11 +976,12 @@ const METHODS = {
 };
 function methodKind() { return S.slate && S.slate.rules.captain ? "single" : "multi"; }
 // the method is remembered per slate-size bracket (owner, 27 Nov 2026: "let's treat 3-4 different to 2"):
-// single game, 2 games, 3-4 games (Props calibrated to start: F115), 5+ games; "method_multi" stays the 5+ key
+// single game, 2 games, 3-4 games (Props calibrated + star cover to start: F115), 5-8 games ("method_multi", the live
+// method), 9+ games (the 7+ games model, fit7b, to start: owner, 28 Nov 2026, "Fit7b for the jackpots"; F118)
 function bracketKey() {
   if (methodKind() === "single") return "single";
   const g = (S.slate && S.slate.games || []).length;
-  return g <= 2 ? "multi2s" : g <= 4 ? "multi34s" : "multi";
+  return g <= 2 ? "multi2s" : g <= 4 ? "multi34s" : g <= 8 ? "multi" : "multi9";
 }
 function fillMethods() {
   const kind = methodKind(), g = (S.slate && S.slate.games || []).length;
