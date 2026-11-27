@@ -465,7 +465,9 @@ async function loadSlate(quiet, stay) {
     if (same) S.lineups = keptLineups.map((lu) => lu.map(({ ds, ...z }) => ({ ...z, i: byDs.get(String(ds)) }))).filter((lu) => lu.every((z) => z.i != null));
     if (S.newContest) {            // a new contest starts on the method last used for its kind
       S.newContest = false;
-      const kind = methodKind(), saved = store.get("method_" + kind);
+      const kind = methodKind(), br = bracketKey();
+      // first time in a bracket: 3-4 games start on Props calibrated; 2 games on what 5+ games last used (the live method)
+      const saved = store.get("method_" + br) || (br === "multi2" ? store.get("method_multi") : null);
       applyMethod([...$("method").options].some((o) => o.value === saved && !o.disabled) ? saved : kind === "single" ? "sghalf" : "propscal");
     } else { renderPlayers(); renderMethodLine(); }
     fillBuildPick(s.builds);
@@ -941,15 +943,22 @@ function renderSgLine() {
 // dropdowns and confusion?"): a method sets everything under Settings and the projection
 // numbers; the old setup buttons are its entries. A setting changed by hand makes it Custom. ──
 const METHODS = {
-  propscal: { name: "Props calibrated", multi: 1, single: 1, line: "Bookmaker props where the books price a player; the three sources, scaled to the props, for the rest. The plainest build, with the longest record." },
+  propscal: { name: "Props calibrated", multi: 1, single: 1, line: "Bookmaker props where the books price a player; the three sources, scaled to the props, for the rest. The plainest build, with the longest record. The method for 3-4 game slates (owner, 27 Nov 2026): on this season's nine 3-4 game contests it beat Half props, blowouts down on eight ($15 +29% against −21%)." },
   fit: { name: "Slate-size model", multi: 1, line: "" },
   stud: { name: "Stud method", multi: 1, line: "" },
-  halfbl: { name: "Half props, blowouts down", multi: 1, line: "Half the bookmaker number, half the three sources scaled to it; players in a game with a spread of 10+ marked down 5%; ten plain teams differing by 3. The best build from 1 November that wasn't fitted to the season (+82% on the $15 contests on paper, 20 Oct-21 Nov); in Measurement as halfbl (its test is the nights from 22 Nov)." },
+  halfbl: { name: "Half props, blowouts down", multi: 1, line: "Half the bookmaker number, half the three sources scaled to it; players in a game with a spread of 10+ marked down 5%; ten plain teams differing by 3. The best build from 1 November that wasn't fitted to the season (+67% on the $15 contests on paper, 20 Oct-21 Nov, paid as the full field pays); in Measurement as halfbl (its test is the nights from 22 Nov)." },
   raw8: { name: "Raw props, max 8 of 10 teams a player", multi: 1, line: "Bookmaker props where priced, the even split of the three sources for the rest; no player in more than 8 teams." },
   sghalf: { name: "Single game: half props", single: 1, line: "" },
   custom: { name: "Custom", multi: 1, single: 1, line: "Your own numbers and settings (open Projection numbers and Settings)." },
 };
 function methodKind() { return S.slate && S.slate.rules.captain ? "single" : "multi"; }
+// the method is remembered per slate-size bracket (owner, 27 Nov 2026: "let's treat 3-4 different to 2"):
+// single game, 2 games, 3-4 games (Props calibrated to start: F115), 5+ games; "method_multi" stays the 5+ key
+function bracketKey() {
+  if (methodKind() === "single") return "single";
+  const g = (S.slate && S.slate.games || []).length;
+  return g <= 2 ? "multi2" : g <= 4 ? "multi34" : "multi";
+}
 function fillMethods() {
   const kind = methodKind(), g = (S.slate && S.slate.games || []).length;
   // every method is listed; the ones for the other kind of contest are greyed out, so nothing goes missing
@@ -967,7 +976,7 @@ function renderMethodLine() {
 }
 function applyMethod(m) {
   $("method").value = m;
-  store.set("method_" + methodKind(), m);
+  store.set("method_" + bracketKey(), m);
   if (m !== "custom") {
     const cap = methodKind() === "single";
     $("studmode").checked = false; $("fitmode").checked = false; $("fitpick").value = "auto";
@@ -986,7 +995,7 @@ function applyMethod(m) {
   remix(); renderMarks(); renderStudLine(); renderFitLine(); renderSgLine(); renderMethodLine();
 }
 function toCustom() {                         // a setting changed by hand
-  if ($("method").value !== "custom") { $("method").value = "custom"; store.set("method_" + methodKind(), "custom"); }
+  if ($("method").value !== "custom") { $("method").value = "custom"; store.set("method_" + bracketKey(), "custom"); }
   renderMethodLine();
 }
 $("method").onchange = () => applyMethod($("method").value);
