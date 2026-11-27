@@ -152,6 +152,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
         </div>
         <div class="row">
           <label class="chk" title="On a stud night: every team holds 2+ of the 4 studs and 3+ of the 5 best values (FINDINGS F43, F46). Other nights: the normal build."><input id="studmode" type="checkbox"> Stud method</label>
+          <label class="chk" title="Each position's two best players by the build's number (ten stars) are each put in at least two of the teams (one if fewer than eight teams); the first team is the plain best (amendment 102, F115)."><input id="starcover" type="checkbox"> Star cover</label>
           <label class="chk" title="The clean-sheet models fitted to this season's $15 multi-game contests, one per slate size (FINDINGS F74-F80). Its own numbers and team rules replace the sliders, differ by, max per team and max teams per player while it is ticked."><input id="fitmode" type="checkbox"> Slate-size model</label>
           <select id="fitpick" style="width:auto;max-width:100%" title="Which model: the one for the slate's size, or a size of your choosing"><option value="auto">for this slate's size</option><option value="fit7b">7+ games model</option><option value="fit7">7+ games model, first version</option><option value="fit46b">4-6 games model</option><option value="fit23">2-3 games model</option></select>
           <label class="chk"><input id="usestacks" type="checkbox"> Game stacks</label>
@@ -198,7 +199,7 @@ label.chk{display:inline-flex;gap:6px;align-items:center;margin:4px 10px 4px 0}
       <h2>Measurement <span class="small mute">how every slider mix would have done, pooled over nights</span></h2>
       <p class="small mute">After the games (5pm Sydney, catch-up 8:30pm), for every settled $2 Mini and $15 tournament (guaranteed prize pools, multi and single game; no double ups, triple ups or 6-player contests), 67 mixes are built the tested way (chalk teams at the first tip; bulk swaps before later tips in multi-game; captain ×1.5 in single game) and placed in the real field: all 66 mixes of DC/BM/RW in 10% steps, plus the even split 33/33/33, plus the <b>fitted blend</b>: the mix that was most accurate on that slate size's earlier slates (the even split until 3 of them). <b>Accuracy</b> = each mix's average miss in DraftStars points on the players every source carries; it settles far sooner than ROI. ROI = money back ÷ money in − 1. $15 contests decide; nothing is adopted under 40 slates of a size.</p>
       <div class="row small"><span>Dates (US):</span><select id="mdates"><option value="all">All dates</option><option value="last">Latest night</option><option value="7">Last 7 nights</option></select></div>
-      <div class="row small"><span>Slate size:</span><button class="mk sz on" data-b="all">All</button><button class="mk sz" data-b="single">Single game</button><button class="mk sz" data-b="2-3">2–3 games</button><button class="mk sz" data-b="4-6">4–6 games</button><button class="mk sz" data-b="7+">7+ games</button></div>
+      <div class="row small"><span>Slate size:</span><button class="mk sz on" data-b="all">All</button><button class="mk sz" data-b="single">Single game</button><button class="mk sz" data-b="2">2 games</button><button class="mk sz" data-b="3-4">3–4 games</button><button class="mk sz" data-b="5-8">5–8 games</button><button class="mk sz" data-b="9+">9+ games</button></div>
       <div class="row small"><span>Teams per contest:</span><button class="mk nq" data-n="15">15</button><button class="mk nq" data-n="10">10</button><button class="mk nq" data-n="5">5</button><button class="mk nq" data-n="1">1</button><label class="chk">or <input id="nteams" type="number" min="1" max="15" value="10" style="width:60px"></label><label class="chk"><input id="allmixes" type="checkbox"> show all 67 mixes</label></div>
       <div id="results">Open this tab to load.</div>
     </div>
@@ -300,8 +301,10 @@ async function attachLines(s) {
   } catch (e) { s.lines_ok = false; }
 }
 
+// Measurement's two reads come from the dfs-measure function (owner, 27 Nov 2026: the slate sizes single / 2 / 3-4 / 5-8 / 9+)
+const MEASURE_API = "https://gpupsgkyyldqyfemtjml.supabase.co/functions/v1/dfs-measure";
 async function api(path, opts = {}) {
-  const r = await fetch(API + "/api" + path, { ...opts, headers: { ...(opts.headers || {}), "x-app-pin": store.get("dfs_pin") || "", "x-app-user": store.get("dfs_name") || "Dale", "content-type": "application/json" } });
+  const r = await fetch((/^\/(results|pnl)(\?|$)/.test(path) ? MEASURE_API : API) + "/api" + path, { ...opts, headers: { ...(opts.headers || {}), "x-app-pin": store.get("dfs_pin") || "", "x-app-user": store.get("dfs_name") || "Dale", "content-type": "application/json" } });
   const j = await r.json().catch(() => ({}));
   if (r.status === 401 && j.reason === "bad_pin") { store.set("dfs_pin", null); refreshSession(); }
   if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
@@ -466,9 +469,9 @@ async function loadSlate(quiet, stay) {
     if (S.newContest) {            // a new contest starts on the method last used for its kind
       S.newContest = false;
       const kind = methodKind(), br = bracketKey();
-      // first time in a bracket: 3-4 games start on Props calibrated; 2 games on what 5+ games last used (the live method)
+      // first time in a bracket: 3-4 games start on Props calibrated + star cover; 2 games on what 5+ games last used (the live method)
       const saved = store.get("method_" + br) || (br === "multi2" ? store.get("method_multi") : null);
-      applyMethod([...$("method").options].some((o) => o.value === saved && !o.disabled) ? saved : kind === "single" ? "sghalf" : "propscal");
+      applyMethod([...$("method").options].some((o) => o.value === saved && !o.disabled) ? saved : kind === "single" ? "sghalf" : br === "multi34s" ? "propsstar" : "propscal");
     } else { renderPlayers(); renderMethodLine(); }
     fillBuildPick(s.builds);
     document.querySelectorAll(".tab").forEach((b) => b.disabled = false);
@@ -804,6 +807,10 @@ $("build").onclick = async () => {
       base.require = [{ ids: new Set(plan.studs.map((p) => p.i)), k: 2 }, { ids: new Set(plan.core.map((p) => p.i)), k: 3 }];
     }
     const maxExp = fit ? fit.c.cap || null : Math.max(0, Math.round(+$("maxexp").value || 0)) || null;
+    // star cover (owner, 27 Nov 2026, 3-4 game slates; research/a99.py "stars"): each position's two best by the number,
+    // each in 2+ teams (1 if fewer than 8); team 1 is the plain best, each later team takes the best uncovered star that fits
+    const stars = $("starcover").checked && !fit && !rules.captain ? starList(pool) : [];
+    const need = N >= 8 ? 2 : 1;
     const lus = [];
     for (let k = 0; k < N; k++) {
       const lockNow = lockAs.filter(([i]) => (used[i] || 0) < markCount(i));                 // in his first `count` teams
@@ -812,7 +819,8 @@ $("build").onclick = async () => {
       // a player already in maxExp teams sits out the rest; locked players aren't capped
       if (maxExp) for (const [i, c] of Object.entries(used)) if (c >= maxExp && S.marks[+i] !== "lock") banNow.add(+i);
       const avoid = lus.map((lu) => new Set(lu.map((x) => x.i)));
-      let lu = window.Lineup.solveOne(h, pool, rules, { ...base, locked: lockNow, banned: banNow, avoid });
+      let lu = k > 0 ? starTry(h, pool, rules, { ...base, locked: lockNow, banned: banNow, avoid }, stars, used, need) : null;
+      lu = lu || window.Lineup.solveOne(h, pool, rules, { ...base, locked: lockNow, banned: banNow, avoid });
       if (!lu && (base.maxGames || base.games)) lu = window.Lineup.solveOne(h, pool, rules, { ...base, maxGames: null, games: null, locked: lockNow, banned: banNow, avoid });   // the stack can't hold: drop it
       // the slate-size model, as Measurement builds it: the game rule goes first, then the required sets
       if (!lu && fit && base.minFromGame) lu = window.Lineup.solveOne(h, pool, rules, { ...base, minFromGame: null, locked: lockNow, banned: banNow, avoid });
@@ -821,16 +829,29 @@ $("build").onclick = async () => {
       lus.push(lu); for (const z of lu) used[z.i] = (used[z.i] || 0) + 1;
     }
     if (!lus.length) throw new Error(base.require ? "no legal lineup with the stud method's studs and value core: loosen the locks or excludes" : "no legal lineup: loosen the locks, or allow more games in the stack");
-    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { method: $("method").value, weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), mark_counts: Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c])), stacks, max_exposure: maxExp, props_cover: propsCover(),
+    S.lineups = lus; S.pick = new Set(lus.map((_, k) => k)); S.settings = { method: $("method").value, weights: weights(), raw: { dc: +$("w_dc").value, bm: +$("w_bm").value, rw: +$("w_rw").value, props: $("propsmode").value }, n: +$("nlu").value, min_diff: +$("mindiff").value, max_per_team: rules.maxPerTeam, locks: locked.map(([i]) => S.pool[i].ds_id), excludes: [...banned].map((i) => S.pool[i].ds_id), mark_counts: Object.fromEntries(Object.entries(S.markN || {}).map(([i, c]) => [S.pool[+i]?.ds_id, c])), stacks, max_exposure: maxExp, props_cover: propsCover(), star_cover: stars.length ? stars.map((p) => S.pool[p.i].ds_id) : null,
       stud: plan ? { night: !!plan.close, game: plan.top ? `${plan.top.away}@${plan.top.home}` : null, total: plan.top ? plan.top.btotal : null, spread: plan.top ? plan.top.spread : null,
                      studs: plan.close ? plan.studs.map((p) => p.ds_id) : [], core: plan.close ? plan.core.map((p) => p.ds_id) : [] } : null };
     renderLineups(pool);
     if (fit) S.settings.fit = { model: fit.model, cfg: fit.c };
-    $("buildmsg").textContent = `${lus.length} lineup(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s${plan ? (plan.close ? " · stud method: stud night" : " · stud method: not a stud night, normal build") : ""}${fit ? ` · ${FIT_NAME[fit.model]}` : ""}`;
+    $("buildmsg").textContent = `${lus.length} lineup(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s${plan ? (plan.close ? " · stud method: stud night" : " · stud method: not a stud night, normal build") : ""}${fit ? ` · ${FIT_NAME[fit.model]}` : ""}${stars.length ? ` · star cover: ${stars.filter((p) => (used[p.i] || 0) >= need).length} of ${stars.length} stars in ${need}+ teams${stars.some((p) => (used[p.i] || 0) < need) ? " (short: " + stars.filter((p) => (used[p.i] || 0) < need).map((p) => p.name).join(", ") + ")" : ""}` : ""}`;
     $("result").classList.remove("hide"); $("result").scrollIntoView({ behavior: "smooth" });
   } catch (e) { $("buildmsg").innerHTML = `<span class="bad">${e.message}</span>`; }
   $("build").disabled = false;
 };
+// star cover (owner, 27 Nov 2026; research/a99.py "stars", mixgrade FIT["propsstar"]): each position's two best by the
+// number, best first; a later team takes the best star still short of `need` teams that fits, else the plain team
+function starList(pool) {
+  return ["PG", "SG", "SF", "PF", "C"].flatMap((ps) => pool.filter((p) => p.mean > 0 && p.pos[0] === ps)
+    .sort((a, b) => b.mean - a.mean).slice(0, 2)).sort((a, b) => b.mean - a.mean);
+}
+function starTry(h, pool, rules, opts, stars, used, need) {
+  for (const st of stars.filter((p) => (used[p.i] || 0) < need && !opts.banned.has(p.i))) {
+    const lu = window.Lineup.solveOne(h, pool, rules, { ...opts, require: [...(opts.require || []), { ids: new Set([st.i]), k: 1 }] });
+    if (lu) return lu;
+  }
+  return null;
+}
 function renderStudLine() {
   const el = $("studline"); if (!el) return;
   if (!$("studmode").checked) { el.innerHTML = ""; return; }
@@ -944,6 +965,7 @@ function renderSgLine() {
 // numbers; the old setup buttons are its entries. A setting changed by hand makes it Custom. ──
 const METHODS = {
   propscal: { name: "Props calibrated", multi: 1, single: 1, line: "Bookmaker props where the books price a player; the three sources, scaled to the props, for the rest. The plainest build, with the longest record. The method for 3-4 game slates (owner, 27 Nov 2026): on this season's nine 3-4 game contests it beat Half props, blowouts down on eight ($15 +29% against −21%)." },
+  propsstar: { name: "Props calibrated + star cover", multi: 1, line: "Props calibrated, and each position's two best players (ten stars) in at least two of the ten teams. The method for 3-4 game slates (owner, 27 Nov 2026): on this season's nine 3-4 game $15 contests +59% against Props calibrated's +29% and the live method's −21%." },
   fit: { name: "Slate-size model", multi: 1, line: "" },
   stud: { name: "Stud method", multi: 1, line: "" },
   halfbl: { name: "Half props, blowouts down", multi: 1, line: "Half the bookmaker number, half the three sources scaled to it; players in a game with a spread of 10+ marked down 5%; ten plain teams differing by 3. The best build from 1 November that wasn't fitted to the season (+67% on the $15 contests on paper, 20 Oct-21 Nov, paid as the full field pays); in Measurement as halfbl (its test is the nights from 22 Nov)." },
@@ -957,7 +979,7 @@ function methodKind() { return S.slate && S.slate.rules.captain ? "single" : "mu
 function bracketKey() {
   if (methodKind() === "single") return "single";
   const g = (S.slate && S.slate.games || []).length;
-  return g <= 2 ? "multi2" : g <= 4 ? "multi34" : "multi";
+  return g <= 2 ? "multi2" : g <= 4 ? "multi34s" : "multi";
 }
 function fillMethods() {
   const kind = methodKind(), g = (S.slate && S.slate.games || []).length;
@@ -979,7 +1001,7 @@ function applyMethod(m) {
   store.set("method_" + bracketKey(), m);
   if (m !== "custom") {
     const cap = methodKind() === "single";
-    $("studmode").checked = false; $("fitmode").checked = false; $("fitpick").value = "auto";
+    $("studmode").checked = false; $("fitmode").checked = false; $("fitpick").value = "auto"; $("starcover").checked = m === "propsstar";
     $("usestacks").checked = false; $("stacks").classList.add("hide");
     $("mindiff").value = 3; $("maxteam").value = (S.slate && S.slate.rules.maxPerTeam) || 5; $("maxexp").value = "";
     setMix(33, 33, 33); $("nlu").value = Math.min(cap ? 5 : 10, S.maxN || 15);
@@ -999,7 +1021,7 @@ function toCustom() {                         // a setting changed by hand
   renderMethodLine();
 }
 $("method").onchange = () => applyMethod($("method").value);
-for (const id of ["mindiff", "maxteam", "maxexp", "usestacks", "studmode", "fitmode", "propsmode", "w_dc", "w_bm", "w_rw", "n_dc", "n_bm", "n_rw"])
+for (const id of ["mindiff", "maxteam", "maxexp", "usestacks", "studmode", "starcover", "fitmode", "propsmode", "w_dc", "w_bm", "w_rw", "n_dc", "n_bm", "n_rw"])
   $(id).addEventListener(id.startsWith("w_") || id.startsWith("n_") ? "input" : "change", toCustom);
 for (const id of ["even", "dconly", "propscal"]) $(id).addEventListener("click", toCustom);
 // another size's model is still the slate-size method
@@ -1190,7 +1212,8 @@ async function loadMeasure() {
     const x = Math.max(1, Math.min(15, +$("nteams").value || 10)); markNq();
     const size = S.measureSize || "all";
     document.querySelectorAll(".sz").forEach((b) => b.classList.toggle("on", b.dataset.b === size));
-    const SIZES = { single: "Single game", "2-3": "2–3 games", "4-6": "4–6 games", "7+": "7+ games" };
+    // the owner's brackets (27 Nov 2026: "Measurement needs to be Single, two-game, 3-4, 5-8, 9+")
+    const SIZES = { single: "Single game", "2": "2 games", "3-4": "3–4 games", "5-8": "5–8 games", "9+": "9+ games" };
     // the answer first (owner, 21 Oct 2026: "I just want to be able to identify what combo is
     // best per games in a slate"): per slate size, the combo to use next (the fitted blend's
     // rule: most accurate on that size's graded slates, even split until 3), the most accurate
@@ -1312,9 +1335,11 @@ async function loadMeasure() {
         // amendment 34 (11 Nov 2026): single game, half props
         // amendment 60 (23 Nov 2026): half props with blowout games down, graded from 22 Nov
         halfbl: "half props, players in a 10+ spread game down 5% (the blowout rule was chosen on 1-21 Nov, so those nights are hindsight; its test is from 22 Nov)",
+        // amendment 106 (27 Nov 2026): the 3-4 game method, the season backfilled
+        propsstar: "props calibrated + star cover: each position's two best in 2+ of the ten teams (the 3-4 game method; chosen on this season's 3-4 game slates to 25 Nov, so those are hindsight; its test is from 26 Nov)",
         sghalf: "single game: half props, half the calibrated sources (fitted to 20 Oct-10 Nov)",
         sgclose: "single game: half props, close games only (spread under 4.5; fitted to 20 Oct-10 Nov)" };
-      const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === "props" || m.mix === "props50" || m.mix === "propscal" || m.mix === "fitsize" || m.mix === "bandsize" || m.mix === "band7" || m.mix === "halfbl" || SPREAD_TAGS[m.mix] || m.mix === curMix || m.wins > 0 || m.top10 > 0;
+      const pinned = (m) => m.mix === "100/0/0" || m.mix === "33/33/33" || m.mix === "fitted" || m.mix === "props" || m.mix === "props50" || m.mix === "propscal" || m.mix === "fitsize" || m.mix === "bandsize" || m.mix === "band7" || m.mix === "halfbl" || m.mix === "propsstar" || SPREAD_TAGS[m.mix] || m.mix === curMix || m.wins > 0 || m.top10 > 0;
       const show = $("allmixes").checked ? rows : rows.filter((m, k) => k < 10 || pinned(m));
       const tag = (m) => (m.mix === "100/0/0" ? " <span class='mute small'>default</span>" : "") + (m.mix === "33/33/33" ? " <span class='mute small'>even</span>" : "") + (m.mix === "fitted" ? " <span class='mute small'>most accurate on earlier slates</span>" : "") + (m.mix === "props" ? " <span class='mute small'>bookmaker props where priced, else even split</span>" : "") + (m.mix === "props50" ? " <span class='mute small'>half props, half even split</span>" : "") + (m.mix === "propscal" ? " <span class='mute small'>props, unpriced players scaled to the props</span>" : "") + (SPREAD_TAGS[m.mix] ? ` <span class='mute small'>${SPREAD_TAGS[m.mix]}</span>` : "") + (m.mix === curMix ? " <span class='mute small'>your sliders</span>" : "");
       html += `<div class="tablewrap"><table><thead><tr><th class="c mob">rank</th><th class="l mixname">DC/BM/RW</th><th class="mob">slates</th><th class="mob">contests</th><th class="mob">in</th><th class="mob">back</th><th>profit</th><th>ROI</th><th title="contests where it got back more than it put in, out of all its contests">profitable</th><th title="contests where its best team would have finished 1st">1st</th><th title="contests of 100+ entries where its best team would have finished in the top 10">top 10</th><th class="l" title="best finish in a contest of 100+ entries">best</th></tr></thead><tbody>`
@@ -1398,7 +1423,7 @@ async function loadMeasure() {
 // well? What model is good? What model is bad? What blend is working and why? ... high level
 // detail to help me make decisions"): plain sentences from the same grades as the tables
 function insights(r, x, size, single) {
-  const buckets = single ? ["single"] : ["2-3", "4-6", "7+"].filter((b) => size === "all" || b === size);
+  const buckets = single ? ["single"] : ["2", "3-4", "5-8", "9+"].filter((b) => size === "all" || b === size);
   const rows = (r.mixes || []).filter((m) => !!m.single === single && +m.k === x && buckets.includes(m.bucket));
   const agg = {};
   for (const m of rows) { const z = agg[m.mix] || (agg[m.mix] = { mix: m.mix, cost: 0, won: 0, contests: 0, profited: 0 }); z.cost += m.cost; z.won += m.won; z.contests += m.contests; z.profited += m.profited || 0; }
