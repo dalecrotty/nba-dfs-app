@@ -469,9 +469,10 @@ async function loadSlate(quiet, stay) {
     if (S.newContest) {            // a new contest starts on the method last used for its kind
       S.newContest = false;
       const kind = methodKind(), br = bracketKey();
-      // first time in a bracket: 3-4 games start on Props calibrated + star cover; 2 games on what 5+ games last used (the live method)
-      const saved = store.get("method_" + br) || (br === "multi2" ? store.get("method_multi") : null);
-      applyMethod([...$("method").options].some((o) => o.value === saved && !o.disabled) ? saved : kind === "single" ? "sghalf" : br === "multi34s" ? "propsstar" : "propscal");
+      // first time in a bracket: 2 games and 3-4 games start on Props calibrated + star cover
+      // (2 games: owner, 28 Nov 2026 AEDT, "Use star cover on 2-game $2 Mini too")
+      const saved = store.get("method_" + br);
+      applyMethod([...$("method").options].some((o) => o.value === saved && !o.disabled) ? saved : kind === "single" ? "sghalf" : br === "multi34s" || br === "multi2s" ? "propsstar" : "propscal");
     } else { renderPlayers(); renderMethodLine(); }
     fillBuildPick(s.builds);
     document.querySelectorAll(".tab").forEach((b) => b.disabled = false);
@@ -965,7 +966,7 @@ function renderSgLine() {
 // numbers; the old setup buttons are its entries. A setting changed by hand makes it Custom. ──
 const METHODS = {
   propscal: { name: "Props calibrated", multi: 1, single: 1, line: "Bookmaker props where the books price a player; the three sources, scaled to the props, for the rest. The plainest build, with the longest record. The method for 3-4 game slates (owner, 27 Nov 2026): on this season's nine 3-4 game contests it beat Half props, blowouts down on eight ($15 +29% against −21%)." },
-  propsstar: { name: "Props calibrated + star cover", multi: 1, line: "Props calibrated, and each position's two best players (ten stars) in at least two of the ten teams. The method for 3-4 game slates (owner, 27 Nov 2026): on this season's nine 3-4 game $15 contests +59% against Props calibrated's +29% and the live method's −21%." },
+  propsstar: { name: "Props calibrated + star cover", multi: 1, line: "Props calibrated, and each position's two best players (ten stars) in at least two of the ten teams. The method for 3-4 game slates (owner, 27 Nov 2026): on this season's nine 3-4 game $15 contests +59% against Props calibrated's +29% and the live method's −21%. Also for the $2 Mini on 2-game slates (+22% against the live method's +11% on 14 contests; no $15 on 2 games)." },
   fit: { name: "Slate-size model", multi: 1, line: "" },
   stud: { name: "Stud method", multi: 1, line: "" },
   halfbl: { name: "Half props, blowouts down", multi: 1, line: "Half the bookmaker number, half the three sources scaled to it; players in a game with a spread of 10+ marked down 5%; ten plain teams differing by 3. The best build from 1 November that wasn't fitted to the season (+67% on the $15 contests on paper, 20 Oct-21 Nov, paid as the full field pays); in Measurement as halfbl (its test is the nights from 22 Nov)." },
@@ -979,7 +980,7 @@ function methodKind() { return S.slate && S.slate.rules.captain ? "single" : "mu
 function bracketKey() {
   if (methodKind() === "single") return "single";
   const g = (S.slate && S.slate.games || []).length;
-  return g <= 2 ? "multi2" : g <= 4 ? "multi34s" : "multi";
+  return g <= 2 ? "multi2s" : g <= 4 ? "multi34s" : "multi";
 }
 function fillMethods() {
   const kind = methodKind(), g = (S.slate && S.slate.games || []).length;
